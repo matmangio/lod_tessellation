@@ -1,0 +1,2 @@
+* !text !filter !merge !diff
+libs/** filter=lfs diff=lfs merge=lfs -text
