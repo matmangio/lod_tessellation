@@ -1,0 +1,17 @@
+{
+    "version": "2.0.0",
+    "label": "Build",
+    "type": "shell",
+    "windows": 
+    {
+        "command": ".\\MakefileWin.bat",
+    },
+    "linux": 
+    {
+        "command": "make -f MakefileLinux" 
+    },
+    "group": {
+        "kind": "build",
+        "isDefault": true
+    }   
+}
