@@ -28,12 +28,13 @@ LDFLAGS = -L$(LDIR) -lglfw3 -lassimp -lz -lminizip -lkubazip -lpoly2tri -lpolycl
 
 SOURCES = ../include/glad/glad.c $(FILENAME).cpp
 
-TARGET = $(FILENAME).out
+TARGET = ../$(FILENAME).out
 
 .PHONY : all
 all:
 	cd $(SRCDIR)
 	$(CXX) $(CXXFLAGS) $(SOURCES) $(LDFLAGS) -o $(TARGET)
+	move ../$(FILENAME).ilk ./$(FILENAME).ilk
 
 .PHONY : clean
 clean :
