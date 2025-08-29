@@ -67,8 +67,9 @@ public:
     // to notice that Model class is not strictly following the Rules of 5
     // https://en.cppreference.com/w/cpp/language/rule_of_three
     // because we are not writing a user-defined destructor.
-    Model(const string& path)
+    Model(const string& path, bool disable_warnings = false)
     {
+        this->disable_warnings = disable_warnings;
         this->loadModel(path);
     }
 
@@ -85,6 +86,9 @@ public:
 
 
 private:
+
+    // flag to disable warning messages
+    bool disable_warnings;
 
     //////////////////////////////////////////
     // loading of the model using Assimp library. Nodes are processed to build a vector of Mesh class instances
@@ -193,7 +197,9 @@ private:
             }
             else{
                 vertex.TexCoords = glm::vec2(0.0f, 0.0f);
-                cout << "WARNING::ASSIMP:: MODEL WITHOUT UV COORDINATES -> TANGENT AND BITANGENT ARE = 0" << endl;
+                if (!this->disable_warnings) {
+                    cout << "WARNING::ASSIMP:: MODEL WITHOUT UV COORDINATES -> TANGENT AND BITANGENT ARE = 0" << endl;
+                }
             }
             // we add the vertex to the list
             vertices.emplace_back(vertex);
