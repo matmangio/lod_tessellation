@@ -21,6 +21,8 @@ using namespace std;
 #include <sstream>
 #include <iostream>
 
+#include <glad/glad.h>
+
 /////////////////// SHADER class ///////////////////////
 class Shader
 {
@@ -88,7 +90,6 @@ public:
         glAttachShader(this->Program, vertex);
         glAttachShader(this->Program, fragment);
         glLinkProgram(this->Program);
-        printf("Prova5");
         // check linking errors
         checkCompileErrors(this->Program, "PROGRAM");
 

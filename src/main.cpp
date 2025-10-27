@@ -4,11 +4,24 @@
 
 #include <glad/glad.h>
 #include <glfw/glfw3.h>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/matrix_inverse.hpp>
+#include <glm/gtc/type_ptr.hpp>
+
+#include <utils/model.h>
+#include <utils/shader.h>
 
 using namespace std;
+using namespace glm;
 
 ////////////////// CONSTANTS //////////////////
 const int screen_dimensions[2] = {1200, 900};
+
+const float teapot_speed = 5.0f;
+
+////////////////// FLAGS //////////////////
+bool wireframe = false;
 
 ////////////////// SIGNATURES //////////////////
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mode);
@@ -39,7 +52,7 @@ int main() {
     glfwSetKeyCallback(window, key_callback);
 
     // Disable mouse cursor
-    // glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
     // Load the GLFW context in GLAD
     if (!gladLoadGLLoader((GLADloadproc) glfwGetProcAddress)) {
@@ -52,7 +65,10 @@ int main() {
     glfwGetFramebufferSize(window, &screen_width, &screen_height);
     glViewport(0, 0, screen_width, screen_height);
 
-    ////////////////// LOAD MODELS //////////////////
+    // Set clear color
+    glClearColor(0.05, 0.05, 0.2, 1.0);
+
+    ////////////////// MODELS //////////////////
     // Check if .obj files are present for the different LODs, create them from the .norm files if not
     for (int i = 0; i < 3; i++) {
         string path = "./models/teapot_surface" + to_string(i) + ".obj";
@@ -60,31 +76,89 @@ int main() {
             convert_norm_to_obj(path);
         }
     }
-        
-    ////////////////// RENDER LOOP //////////////////
+
+    // Load the .obj models
+    Model teapot_lod0("./models/teapot_surface0.obj", true);
+    Model teapot_lod1("./models/teapot_surface1.obj", true);
+    Model teapot_lod2("./models/teapot_surface2.obj", true);
+    
+    ////////////////// SHADERS //////////////////
+    // Load the shader programs
+    Shader static_LOD("src/static.vert", "src/static.frag");
+    static_LOD.Use();
+
+    ////////////////// TRANSFORMS //////////////////
+    // Projection and view matrices
+    mat4 projection = perspective(45.0f, (float) screen_width / (float) screen_height, 0.1f, 10000.0f);
+    mat4 view = lookAt(vec3(0.0f, 0.0f, 7.0f), vec3(0.0f, 0.0f, -7.0f), vec3(0.0f, 1.0f, 0.0f));
+
+    // Model matrices
+    mat4 static_model_matrix = mat4(1.0f);
+
+    ////////////////// RENDERING LOOP //////////////////
+    float delta_time, current_frame, last_frame;
+    vec3 position = vec3(0.0f, -1.0f, -1.0f);
+    vec3 direction = vec3(0.0f, 0.0f, -1.0f);
+
     while (!glfwWindowShouldClose(window)) {
+        
+        // Compute delta time
+        current_frame = glfwGetTime();
+        delta_time = current_frame - last_frame;
+        last_frame = current_frame;
+        
         // Check for I/O events
         glfwPollEvents();
 
         // Clear the color and depth buffers
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        
+
+        // Update position
+        position += (teapot_speed * delta_time) * direction;
+        if (position.z <= -40.0f || position.z >= -1.0f) {
+            direction = -direction;
+        }
+
+        glUniformMatrix4fv(glGetUniformLocation(static_LOD.Program, "projection_matrix"), 1, GL_FALSE, value_ptr(projection));
+        glUniformMatrix4fv(glGetUniformLocation(static_LOD.Program, "view_matrix"), 1, GL_FALSE, value_ptr(view));
+
+        static_model_matrix = mat4(1.0f);
+        static_model_matrix = translate(static_model_matrix, position);
+        glUniformMatrix4fv(glGetUniformLocation(static_LOD.Program, "model_matrix"), 1, GL_FALSE, value_ptr(static_model_matrix));
+
+        if (position.z > -5.0f) {
+            teapot_lod2.Draw();
+        } else if (position.z > -25.0f) {
+            teapot_lod1.Draw();
+        } else {
+            teapot_lod0.Draw();
+        }
+
         // Render the current frame
         glfwSwapBuffers(window);
     }
 
     ////////////////// CLEANUP //////////////////
+    static_LOD.Delete();
+
     glfwTerminate();
     return 0;
 }
 
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mode) {
     
-    // ESC: exit window
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
+        // ESC: exit window
         glfwSetWindowShouldClose(window, true);
+    } else if (key == GLFW_KEY_L && action == GLFW_PRESS) {
+        // L: wireframe on/off
+        wireframe = !wireframe;
+        if (wireframe) {
+            glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+        } else {
+            glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+        }
     }
-
 }
 
 ////////////////// HELPER FUNCTIONS //////////////////
@@ -95,6 +169,8 @@ bool file_exists(const string& path) {
 }
 
 void convert_norm_to_obj(const string& obj_path) {
+    
+    // Open files
     string norm_path = obj_path.substr(0, obj_path.length() - 4) + ".norm";
     
     ifstream norm_model(norm_path);
@@ -111,7 +187,7 @@ void convert_norm_to_obj(const string& obj_path) {
     int vertex_index = 1;
     int faces_count = 0;
     while (!norm_model.eof() && faces_count < triangles_count) {
-        // Read 6 lines as vertex coordinates and normal coordinates intertwined
+        // Read 6 lines as 3 vertex coordinates and 3 normal coordinates intertwined
         for (int i = 0; i < 6; i++) {
             getline(norm_model, temp);
             if (i % 2 == 0) {
@@ -136,8 +212,10 @@ void convert_norm_to_obj(const string& obj_path) {
         vertex_index += 3;
     }
 
+    string options = "s 1";
+
     // Write vertices, normals and faces
-    obj_model << vertices << endl << normals << endl << faces;
+    obj_model << vertices << endl << normals << endl << options << endl << faces;
 
     norm_model.close();
     obj_model.close();

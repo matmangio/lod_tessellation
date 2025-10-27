@@ -195,7 +195,7 @@ private:
                 vector.z = mesh->mBitangents[i].z;
                 vertex.Bitangent = vector;
             }
-            else{
+            else {
                 vertex.TexCoords = glm::vec2(0.0f, 0.0f);
                 if (!this->disable_warnings) {
                     cout << "WARNING::ASSIMP:: MODEL WITHOUT UV COORDINATES -> TANGENT AND BITANGENT ARE = 0" << endl;
