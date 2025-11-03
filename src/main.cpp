@@ -9,6 +9,10 @@
 #include <glm/gtc/matrix_inverse.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
+#include <imgui/imgui.h>
+#include <imgui/imgui_impl_glfw.h>
+#include <imgui/imgui_impl_opengl3.h>
+
 #include <utils/model.h>
 #include <utils/shader.h>
 
@@ -52,7 +56,7 @@ int main() {
     glfwSetKeyCallback(window, key_callback);
 
     // Disable mouse cursor
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    // glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
     // Load the GLFW context in GLAD
     if (!gladLoadGLLoader((GLADloadproc) glfwGetProcAddress)) {
@@ -67,6 +71,17 @@ int main() {
 
     // Set clear color
     glClearColor(0.05, 0.05, 0.2, 1.0);
+
+    ////////////////// GUI INITIALIZATION //////////////////
+    // Setup ImGui context and options
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO();
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+
+    // Connect to GLFW window
+    ImGui_ImplGlfw_InitForOpenGL(window, true);
+    ImGui_ImplOpenGL3_Init();
 
     ////////////////// MODELS //////////////////
     // Check if .obj files are present for the different LODs, create them from the .norm files if not
@@ -96,7 +111,7 @@ int main() {
     mat4 static_model_matrix = mat4(1.0f);
 
     ////////////////// RENDERING LOOP //////////////////
-    float delta_time, current_frame, last_frame;
+    float delta_time, current_frame, last_frame = 0;
     vec3 position = vec3(0.0f, -1.0f, -1.0f);
     vec3 direction = vec3(0.0f, 0.0f, -1.0f);
 
@@ -112,6 +127,11 @@ int main() {
 
         // Clear the color and depth buffers
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        // Start GUI frame
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
 
         // Update position
         position += (teapot_speed * delta_time) * direction;
@@ -134,14 +154,23 @@ int main() {
             teapot_lod0.Draw();
         }
 
+        // Render GUI on top
+        ImGui::Render();
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
         // Render the current frame
         glfwSwapBuffers(window);
     }
 
     ////////////////// CLEANUP //////////////////
     static_LOD.Delete();
+    
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
 
     glfwTerminate();
+
     return 0;
 }
 
