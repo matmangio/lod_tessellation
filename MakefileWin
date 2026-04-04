@@ -25,7 +25,7 @@ CCFLAGS  = /Od /Zi /EHsc /MT
 # linker flags:
 LFLAGS = /OUT:../$(FILENAME).exe /PDB:./$(FILENAME).pdb /LIBPATH:$(LDIR) glfw3.lib assimp-vc143-mt.lib zlib.lib minizip.lib kubazip.lib poly2tri.lib polyclipping.lib draco.lib pugixml.lib gdi32.lib user32.lib Shell32.lib Advapi32.lib
 
-SOURCES = $(IDIR)/glad/glad.c $(IDIR)/imgui/imgui_demo.cpp $(IDIR)/imgui/imgui_draw.cpp $(IDIR)/imgui/imgui_impl_glfw.cpp $(IDIR)/imgui/imgui_impl_opengl3.cpp $(IDIR)/imgui/imgui_stdlib.cpp $(IDIR)/imgui/imgui_tables.cpp $(IDIR)/imgui/imgui_widgets.cpp $(IDIR)/imgui/imgui.cpp $(FILENAME).cpp
+SOURCES = $(IDIR)/glad/glad.c $(IDIR)/imgui/imgui_demo.cpp $(IDIR)/imgui/imgui_draw.cpp $(IDIR)/imgui/imgui_impl_glfw.cpp $(IDIR)/imgui/imgui_impl_opengl3.cpp $(IDIR)/imgui/imgui_stdlib.cpp $(IDIR)/imgui/imgui_tables.cpp $(IDIR)/imgui/imgui_widgets.cpp $(IDIR)/imgui/imgui.cpp $(IDIR)/imgui/implot.cpp $(IDIR)/imgui/implot_items.cpp $(FILENAME).cpp
 
 TARGET = $(FILENAME).exe
 

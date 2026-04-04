@@ -3,4 +3,3 @@ src/*.obj
 src/*.pdb
 models/*.obj
 *.exe
-imgui.ini

@@ -12,9 +12,14 @@
 #include <imgui/imgui.h>
 #include <imgui/imgui_impl_glfw.h>
 #include <imgui/imgui_impl_opengl3.h>
+#include <imgui/implot.h>
+#include <imgui/implot_internal.h>
 
 #include <utils/model.h>
 #include <utils/shader.h>
+
+// Disable Imgui demo windows to save compile time
+#define IMGUI_DISABLE_DEMO_WINDOWS
 
 using namespace std;
 using namespace glm;
@@ -22,13 +27,17 @@ using namespace glm;
 ////////////////// CONSTANTS //////////////////
 const int screen_dimensions[2] = {1200, 900};
 
-const float teapot_speed = 5.0f;
+const float movement_speed = 5.0f;
+const float rotation_speed = 30.0f;
 
 ////////////////// FLAGS //////////////////
 bool wireframe = false;
 
 ////////////////// SIGNATURES //////////////////
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mode);
+
+void prepare_gui_frame(const vector<float> &frame_times, const vector<int> &lod_levels, int max_len);
+int k_formatter(double value, char* buff, int size, void* data);
 
 bool file_exists(const string& path);
 void convert_norm_to_obj(const string& norm_path);
@@ -76,6 +85,8 @@ int main() {
     // Setup ImGui context and options
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
+	ImPlot::CreateContext();
+
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
@@ -99,7 +110,7 @@ int main() {
     
     ////////////////// SHADERS //////////////////
     // Load the shader programs
-    Shader static_LOD("src/static.vert", "src/static.frag");
+    Shader static_LOD("shaders/static.vert", "shaders/static.frag");
     static_LOD.Use();
 
     ////////////////// TRANSFORMS //////////////////
@@ -112,8 +123,18 @@ int main() {
 
     ////////////////// RENDERING LOOP //////////////////
     float delta_time, current_frame, last_frame = 0;
-    vec3 position = vec3(0.0f, -1.0f, -1.0f);
-    vec3 direction = vec3(0.0f, 0.0f, -1.0f);
+
+    int frame_count = 0;
+	int frame_limit = 25;
+    float time_accumulator = 0.0f;
+
+	int avg_times_max = 200;
+	vector<float> avg_times;
+	vector<int> lod_levels;
+
+    vec3 position = vec3(0.0f, -1.0f, -9.9f);
+    vec3 direction = vec3(0.0f, 0.0f, 1.0f);
+	float rotation_angle = 0.0f;
 
     while (!glfwWindowShouldClose(window)) {
         
@@ -121,38 +142,73 @@ int main() {
         current_frame = glfwGetTime();
         delta_time = current_frame - last_frame;
         last_frame = current_frame;
-        
+
         // Check for I/O events
         glfwPollEvents();
 
         // Clear the color and depth buffers
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // Start GUI frame
-        ImGui_ImplOpenGL3_NewFrame();
-        ImGui_ImplGlfw_NewFrame();
-        ImGui::NewFrame();
-
-        // Update position
-        position += (teapot_speed * delta_time) * direction;
-        if (position.z <= -40.0f || position.z >= -1.0f) {
+        // Update position and rotation
+        position += (movement_speed * delta_time) * direction;
+		rotation_angle += (rotation_speed * delta_time);
+		while (rotation_angle >= 360.0f) {
+			rotation_angle -= 360.0f;
+		}
+        if (position.z <= -37.0f || position.z >= -1.0f) {
             direction = -direction;
         }
 
+		// Select LOD level
+		int lod_level = 0;
+		if (position.z > -10.0f) {
+            lod_level = 2;
+        } else if (position.z > -28.0f) {
+            lod_level = 1;
+		}
+
+		// Save time for render_time computation
+		glFinish();
+		float start_time_static = glfwGetTime();
+
+		// Send matrices
         glUniformMatrix4fv(glGetUniformLocation(static_LOD.Program, "projection_matrix"), 1, GL_FALSE, value_ptr(projection));
         glUniformMatrix4fv(glGetUniformLocation(static_LOD.Program, "view_matrix"), 1, GL_FALSE, value_ptr(view));
 
         static_model_matrix = mat4(1.0f);
         static_model_matrix = translate(static_model_matrix, position);
+		static_model_matrix = rotate(static_model_matrix, radians(rotation_angle), vec3(0, 1, 0));
         glUniformMatrix4fv(glGetUniformLocation(static_LOD.Program, "model_matrix"), 1, GL_FALSE, value_ptr(static_model_matrix));
 
-        if (position.z > -5.0f) {
+        if (lod_level == 2) {
             teapot_lod2.Draw();
-        } else if (position.z > -25.0f) {
+        } else if (lod_level == 1) {
             teapot_lod1.Draw();
         } else {
             teapot_lod0.Draw();
         }
+
+		// Update avg_frame_time_ms
+		glFinish();
+		float render_time = (glfwGetTime() - start_time_static) * 1000;
+		
+		frame_count++;
+		time_accumulator += render_time;
+        if (frame_count >= frame_limit) {
+            float avg_frame_time_ms = (time_accumulator / frame_limit);
+            time_accumulator = 0;
+            frame_count = 0;
+
+			avg_times.push_back(avg_frame_time_ms);
+			lod_levels.push_back(lod_level);
+			if (int(avg_times.size()) > avg_times_max) {
+				avg_times.erase(avg_times.begin());
+				lod_levels.erase(lod_levels.begin());
+			}
+        }
+
+		// Setup GUI frame
+        prepare_gui_frame(avg_times, lod_levels, avg_times_max);
 
         // Render GUI on top
         ImGui::Render();
@@ -168,6 +224,7 @@ int main() {
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
+	ImPlot::DestroyContext();
 
     glfwTerminate();
 
@@ -188,6 +245,96 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
             glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
         }
     }
+}
+
+////////////////// GUI FUNCTIONS //////////////////
+
+void prepare_gui_frame(const vector<float> &avg_times, const vector<int> &lod_levels, int max_len) {
+    // Setup new GUI frame
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+
+    // Define options for the GUI window
+    ImGuiWindowFlags window_flags = 0;
+    window_flags |= ImGuiWindowFlags_NoScrollbar;
+    window_flags |= ImGuiWindowFlags_NoMove;
+    window_flags |= ImGuiWindowFlags_NoResize;
+    window_flags |= ImGuiWindowFlags_NoCollapse;
+
+	// Find LOD changes
+	vector<int> lod_changes;
+	lod_changes.push_back(0);
+
+	for (int i = 1; i < int(lod_levels.size()) - 1; i++) {
+		if (lod_levels[i] != lod_levels[i+1]) {
+			lod_changes.push_back(i+1);
+		}
+	}
+
+	// Compute triangle counts
+	vector<int> triangle_counts;
+	for (int i = 0; i < int(lod_levels.size()); i++) {
+		int trigs = (lod_levels[i] == 0)? 5144 : ((lod_levels[i] == 1))? 22885 : 158865;
+		triangle_counts.push_back(trigs);
+	}
+
+    // Init window
+    ImGui::Begin("Performance Analysis", NULL, window_flags);
+
+	if (ImPlot::BeginPlot("Frame Times")) {
+		// ImPlot::SetupAxes("##", "##", 0, ImPlotAxisFlags_AutoFit);
+		ImPlot::SetupAxisLimits(ImAxis_X1, 0, max_len-1, ImPlotCond_Always);
+		ImPlot::SetupAxisFormat(ImAxis_X1, "");
+		ImPlot::SetupAxisLimits(ImAxis_Y1, 0.0f, 1.0f);
+		ImPlot::SetupAxisLimitsConstraints(ImAxis_Y1, 0.0, INFINITY);
+		ImPlot::SetupAxisFormat(ImAxis_Y1, "%.2f");
+
+		ImPlotSpec specs;
+		specs.FillAlpha = 0.25f;
+		specs.Flags = ImPlotLineFlags_Shaded;
+
+		if (int(avg_times.size()) > 0) {
+			ImPlot::PlotLine("Static LOD", &avg_times[0], int(avg_times.size()), 1.0, 0.0, specs);
+		}
+
+		if (int(lod_levels.size()) > 0) {
+			specs.LineColor = ImPlot::GetLastItemColor();
+			ImPlot::PlotInfLines("##LOD Changes", &lod_changes[0], int(lod_changes.size()), specs);
+
+			for (int i = 0; i < int(lod_changes.size()); i++) {
+				string text = "LOD " + std::to_string(lod_levels[lod_changes[i]]);
+				ImPlot::PlotText(text.c_str(), lod_changes[i], 0.0f, ImVec2(25, -15));
+			}
+		}
+
+		ImPlot::EndPlot();
+	}
+
+	if (ImPlot::BeginPlot("Triangle count")) {
+		ImPlot::SetupAxesLimits(0,max_len-1,0,190000, ImPlotCond_Always);
+		ImPlot::SetupAxisFormat(ImAxis_X1, "");
+		ImPlot::SetupAxisFormat(ImAxis_Y1, k_formatter);
+
+		ImPlotSpec specs;
+		specs.FillAlpha = 0.25f;
+		specs.Flags = ImPlotStairsFlags_Shaded;
+
+		ImPlot::PlotStairs("Static LOD", &triangle_counts[0], int(triangle_counts.size()), 1.0, 0.0, specs);
+
+		ImPlot::EndPlot();
+	}
+
+    ImGui::End();
+
+    return;
+}
+
+int k_formatter(double value, char* buff, int size, void* data) {
+    if (fabs(value) >= 1000) {  
+        return snprintf(buff, size, "%.0fk", value / 1000.0);  
+    }  
+    return snprintf(buff, size, "%.0f", value); 
 }
 
 ////////////////// HELPER FUNCTIONS //////////////////
