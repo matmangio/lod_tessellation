@@ -30,8 +30,23 @@ const int screen_dimensions[2] = {1200, 900};
 const float movement_speed = 5.0f;
 const float rotation_speed = 30.0f;
 
+// diffusive, specular and ambient components
+GLfloat diffuseColor[] = {0.298f, 0.447f, 0.69f};
+GLfloat specularColor[] = {1.0f, 1.0f, 1.0f};
+GLfloat ambientColor[] = {0.1f, 0.1f, 0.1f};
+
+// weights for the diffusive, specular and ambient components
+GLfloat Kd = 0.5f;
+GLfloat Ks = 0.3f;
+GLfloat Ka = 0.2f;
+
+// shininess coefficient
+GLfloat shininess = 25.0f;
+
 ////////////////// FLAGS //////////////////
 bool wireframe = false;
+bool movement = true;
+bool rotation = true;
 
 ////////////////// SIGNATURES //////////////////
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mode);
@@ -78,8 +93,11 @@ int main() {
     glfwGetFramebufferSize(window, &screen_width, &screen_height);
     glViewport(0, 0, screen_width, screen_height);
 
+	// Enable the Z check
+	glEnable(GL_DEPTH_TEST);
+
     // Set clear color
-    glClearColor(0.05, 0.05, 0.2, 1.0);
+    glClearColor(0.2, 0.2, 0.2, 1.0);
 
     ////////////////// GUI INITIALIZATION //////////////////
     // Setup ImGui context and options
@@ -116,10 +134,11 @@ int main() {
     ////////////////// TRANSFORMS //////////////////
     // Projection and view matrices
     mat4 projection = perspective(45.0f, (float) screen_width / (float) screen_height, 0.1f, 10000.0f);
-    mat4 view = lookAt(vec3(0.0f, 0.0f, 7.0f), vec3(0.0f, 0.0f, -7.0f), vec3(0.0f, 1.0f, 0.0f));
+    mat4 view = lookAt(vec3(0.0f, 5.0f, 7.0f), vec3(0.0f, 0.0f, -7.0f), vec3(0.0f, 1.0f, 0.0f));
 
     // Model matrices
     mat4 static_model_matrix = mat4(1.0f);
+	mat3 static_normal_matrix = mat3(1.0f);
 
     ////////////////// RENDERING LOOP //////////////////
     float delta_time, current_frame, last_frame = 0;
@@ -133,8 +152,11 @@ int main() {
 	vector<int> lod_levels;
 
     vec3 position = vec3(0.0f, -1.0f, -9.9f);
-    vec3 direction = vec3(0.0f, 0.0f, 1.0f);
+    vec3 direction = vec3(0.0f, 0.0f, -1.0f);
 	float rotation_angle = 0.0f;
+
+	vec3 light_position = position;
+	vec3 light_offset = vec3(0.0f, 5.0f, 2.0f);
 
     while (!glfwWindowShouldClose(window)) {
         
@@ -149,15 +171,24 @@ int main() {
         // Clear the color and depth buffers
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // Update position and rotation
-        position += (movement_speed * delta_time) * direction;
-		rotation_angle += (rotation_speed * delta_time);
-		while (rotation_angle >= 360.0f) {
-			rotation_angle -= 360.0f;
+        // Update position and rotation if movement is true
+		if (movement) {
+			position += (movement_speed * delta_time) * direction;
+
+			if (position.z >= -1.0f) {
+				direction = {0.0f, 0.0f, -1.0f};
+			} else if (position.z <= -37.0f) {
+				direction = {0.0f, 0.0f, 1.0f};
+			}
+
+			light_position = position + light_offset;
 		}
-        if (position.z <= -37.0f || position.z >= -1.0f) {
-            direction = -direction;
-        }
+		if (rotation) {
+			rotation_angle += (rotation_speed * delta_time);
+			while (rotation_angle >= 360.0f) {
+				rotation_angle -= 360.0f;
+			}
+		}
 
 		// Select LOD level
 		int lod_level = 0;
@@ -171,14 +202,25 @@ int main() {
 		glFinish();
 		float start_time_static = glfwGetTime();
 
-		// Send matrices
+		// Send matrices and uniforms
         glUniformMatrix4fv(glGetUniformLocation(static_LOD.Program, "projection_matrix"), 1, GL_FALSE, value_ptr(projection));
         glUniformMatrix4fv(glGetUniformLocation(static_LOD.Program, "view_matrix"), 1, GL_FALSE, value_ptr(view));
+		glUniform3fv(glGetUniformLocation(static_LOD.Program, "diffuse_color"), 1, diffuseColor);
+        glUniform3fv(glGetUniformLocation(static_LOD.Program, "ambient_color"), 1, ambientColor);
+        glUniform3fv(glGetUniformLocation(static_LOD.Program, "specular_color"), 1, specularColor);
+		glUniform3fv(glGetUniformLocation(static_LOD.Program, "light_position"), 1, value_ptr(light_position));
+		glUniform1f(glGetUniformLocation(static_LOD.Program, "k_d"), Kd);
+		glUniform1f(glGetUniformLocation(static_LOD.Program, "k_s"), Ks);
+        glUniform1f(glGetUniformLocation(static_LOD.Program, "k_a"), Ka);
+        glUniform1f(glGetUniformLocation(static_LOD.Program, "shininess"), shininess);
 
         static_model_matrix = mat4(1.0f);
+		static_normal_matrix = mat3(1.0f);
         static_model_matrix = translate(static_model_matrix, position);
 		static_model_matrix = rotate(static_model_matrix, radians(rotation_angle), vec3(0, 1, 0));
+		static_normal_matrix = inverseTranspose(mat3(view * static_model_matrix));
         glUniformMatrix4fv(glGetUniformLocation(static_LOD.Program, "model_matrix"), 1, GL_FALSE, value_ptr(static_model_matrix));
+		glUniformMatrix3fv(glGetUniformLocation(static_LOD.Program, "normal_matrix"), 1, GL_FALSE, value_ptr(static_normal_matrix));
 
         if (lod_level == 2) {
             teapot_lod2.Draw();
@@ -236,15 +278,21 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
         // ESC: exit window
         glfwSetWindowShouldClose(window, true);
-    } else if (key == GLFW_KEY_L && action == GLFW_PRESS) {
-        // L: wireframe on/off
+    } else if (key == GLFW_KEY_W && action == GLFW_PRESS) {
+        // W: wireframe on/off
         wireframe = !wireframe;
         if (wireframe) {
             glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
         } else {
             glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
         }
-    }
+    } else if (key == GLFW_KEY_M && action == GLFW_PRESS) {
+		// M: movement on/off
+		movement = !movement;
+	} else if (key == GLFW_KEY_R && action == GLFW_PRESS) {
+		// R: rotation on/off
+		rotation = !rotation;
+	}
 }
 
 ////////////////// GUI FUNCTIONS //////////////////
@@ -388,7 +436,7 @@ void convert_norm_to_obj(const string& obj_path) {
         vertex_index += 3;
     }
 
-    string options = "s 1";
+    string options = "";
 
     // Write vertices, normals and faces
     obj_model << vertices << endl << normals << endl << options << endl << faces;
