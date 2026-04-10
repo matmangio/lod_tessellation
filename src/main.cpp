@@ -27,7 +27,7 @@ using namespace glm;
 ////////////////// CONSTANTS //////////////////
 const int screen_dimensions[2] = {1200, 900};
 
-const float movement_speed = 5.0f;
+const float movement_speed = 4.0f;
 const float rotation_speed = 30.0f;
 
 // diffusive, specular and ambient components
@@ -36,9 +36,9 @@ GLfloat specularColor[] = {1.0f, 1.0f, 1.0f};
 GLfloat ambientColor[] = {0.1f, 0.1f, 0.1f};
 
 // weights for the diffusive, specular and ambient components
-GLfloat Kd = 0.5f;
-GLfloat Ks = 0.3f;
-GLfloat Ka = 0.2f;
+GLfloat Kd = 0.6f;
+GLfloat Ks = 0.4f;
+GLfloat Ka = 0.3f;
 
 // shininess coefficient
 GLfloat shininess = 25.0f;
@@ -79,9 +79,6 @@ int main() {
     // Link callbacks
     glfwSetKeyCallback(window, key_callback);
 
-    // Disable mouse cursor
-    // glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-
     // Load the GLFW context in GLAD
     if (!gladLoadGLLoader((GLADloadproc) glfwGetProcAddress)) {
         cout << "Failed to initialize GLAD. Terminating..." << endl;
@@ -93,11 +90,13 @@ int main() {
     glfwGetFramebufferSize(window, &screen_width, &screen_height);
     glViewport(0, 0, screen_width, screen_height);
 
+	////////////////// OPENGL INITIALIZATION //////////////////
+
 	// Enable the Z check
 	glEnable(GL_DEPTH_TEST);
 
     // Set clear color
-    glClearColor(0.2, 0.2, 0.2, 1.0);
+    glClearColor(0.4, 0.4, 0.4, 1.0);
 
     ////////////////// GUI INITIALIZATION //////////////////
     // Setup ImGui context and options
@@ -128,8 +127,8 @@ int main() {
     
     ////////////////// SHADERS //////////////////
     // Load the shader programs
-    Shader static_LOD("shaders/static.vert", "shaders/static.frag");
-    static_LOD.Use();
+    Shader static_shader("shaders/static.vert", "shaders/static.frag");
+	// Shader dynamic_shader("shaders/dynamic.vert", "shaders/dynamic.frag", "shaders/dynamic.tcs", "shaders/dynamic.tes");
 
     ////////////////// TRANSFORMS //////////////////
     // Projection and view matrices
@@ -147,7 +146,8 @@ int main() {
 	int frame_limit = 25;
     float time_accumulator = 0.0f;
 
-	int avg_times_max = 200;
+	float avg_frame_time_ms;
+	int avg_times_max = 2500;
 	vector<float> avg_times;
 	vector<int> lod_levels;
 
@@ -156,7 +156,7 @@ int main() {
 	float rotation_angle = 0.0f;
 
 	vec3 light_position = position;
-	vec3 light_offset = vec3(0.0f, 5.0f, 2.0f);
+	vec3 light_offset = vec3(0.0f, 4.0f, 4.0f);
 
     while (!glfwWindowShouldClose(window)) {
         
@@ -198,29 +198,32 @@ int main() {
             lod_level = 1;
 		}
 
+		// Select the Static Shader
+		static_shader.Use();
+
 		// Save time for render_time computation
 		glFinish();
 		float start_time_static = glfwGetTime();
 
 		// Send matrices and uniforms
-        glUniformMatrix4fv(glGetUniformLocation(static_LOD.Program, "projection_matrix"), 1, GL_FALSE, value_ptr(projection));
-        glUniformMatrix4fv(glGetUniformLocation(static_LOD.Program, "view_matrix"), 1, GL_FALSE, value_ptr(view));
-		glUniform3fv(glGetUniformLocation(static_LOD.Program, "diffuse_color"), 1, diffuseColor);
-        glUniform3fv(glGetUniformLocation(static_LOD.Program, "ambient_color"), 1, ambientColor);
-        glUniform3fv(glGetUniformLocation(static_LOD.Program, "specular_color"), 1, specularColor);
-		glUniform3fv(glGetUniformLocation(static_LOD.Program, "light_position"), 1, value_ptr(light_position));
-		glUniform1f(glGetUniformLocation(static_LOD.Program, "k_d"), Kd);
-		glUniform1f(glGetUniformLocation(static_LOD.Program, "k_s"), Ks);
-        glUniform1f(glGetUniformLocation(static_LOD.Program, "k_a"), Ka);
-        glUniform1f(glGetUniformLocation(static_LOD.Program, "shininess"), shininess);
+        glUniformMatrix4fv(glGetUniformLocation(static_shader.Program, "projection_matrix"), 1, GL_FALSE, value_ptr(projection));
+        glUniformMatrix4fv(glGetUniformLocation(static_shader.Program, "view_matrix"), 1, GL_FALSE, value_ptr(view));
+		glUniform3fv(glGetUniformLocation(static_shader.Program, "diffuse_color"), 1, diffuseColor);
+        glUniform3fv(glGetUniformLocation(static_shader.Program, "ambient_color"), 1, ambientColor);
+        glUniform3fv(glGetUniformLocation(static_shader.Program, "specular_color"), 1, specularColor);
+		glUniform3fv(glGetUniformLocation(static_shader.Program, "light_position"), 1, value_ptr(light_position));
+		glUniform1f(glGetUniformLocation(static_shader.Program, "k_d"), Kd);
+		glUniform1f(glGetUniformLocation(static_shader.Program, "k_s"), Ks);
+        glUniform1f(glGetUniformLocation(static_shader.Program, "k_a"), Ka);
+        glUniform1f(glGetUniformLocation(static_shader.Program, "shininess"), shininess);
 
         static_model_matrix = mat4(1.0f);
 		static_normal_matrix = mat3(1.0f);
         static_model_matrix = translate(static_model_matrix, position);
 		static_model_matrix = rotate(static_model_matrix, radians(rotation_angle), vec3(0, 1, 0));
 		static_normal_matrix = inverseTranspose(mat3(view * static_model_matrix));
-        glUniformMatrix4fv(glGetUniformLocation(static_LOD.Program, "model_matrix"), 1, GL_FALSE, value_ptr(static_model_matrix));
-		glUniformMatrix3fv(glGetUniformLocation(static_LOD.Program, "normal_matrix"), 1, GL_FALSE, value_ptr(static_normal_matrix));
+        glUniformMatrix4fv(glGetUniformLocation(static_shader.Program, "model_matrix"), 1, GL_FALSE, value_ptr(static_model_matrix));
+		glUniformMatrix3fv(glGetUniformLocation(static_shader.Program, "normal_matrix"), 1, GL_FALSE, value_ptr(static_normal_matrix));
 
         if (lod_level == 2) {
             teapot_lod2.Draw();
@@ -237,16 +240,16 @@ int main() {
 		frame_count++;
 		time_accumulator += render_time;
         if (frame_count >= frame_limit) {
-            float avg_frame_time_ms = (time_accumulator / frame_limit);
+            avg_frame_time_ms = (time_accumulator / frame_limit);
             time_accumulator = 0;
             frame_count = 0;
+        }
 
 			avg_times.push_back(avg_frame_time_ms);
 			lod_levels.push_back(lod_level);
 			if (int(avg_times.size()) > avg_times_max) {
 				avg_times.erase(avg_times.begin());
 				lod_levels.erase(lod_levels.begin());
-			}
         }
 
 		// Setup GUI frame
@@ -261,7 +264,7 @@ int main() {
     }
 
     ////////////////// CLEANUP //////////////////
-    static_LOD.Delete();
+    static_shader.Delete();
     
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
