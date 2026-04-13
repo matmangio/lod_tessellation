@@ -90,13 +90,6 @@ public:
         // check compilation errors
         checkCompileErrors(vertex, "VERTEX");
 
-        // Fragment Shader
-        fragment = glCreateShader(GL_FRAGMENT_SHADER);
-        glShaderSource(fragment, 1, &fShaderCode, NULL);
-        glCompileShader(fragment);
-        // check compilation errors
-        checkCompileErrors(fragment, "FRAGMENT");
-
 		// If present, do the same for tessellation shaders
 		if (tessCtrlPath != NULL) {
         	tessControl = glCreateShader(GL_TESS_CONTROL_SHADER);
@@ -112,12 +105,19 @@ public:
 			checkCompileErrors(tessEvaluation, "TESSELLATION EVALUATION");
 		}
 
+		// Fragment Shader
+        fragment = glCreateShader(GL_FRAGMENT_SHADER);
+        glShaderSource(fragment, 1, &fShaderCode, NULL);
+        glCompileShader(fragment);
+        // check compilation errors
+        checkCompileErrors(fragment, "FRAGMENT");
+
         // Step 3: Shader Program creation
         this->Program = glCreateProgram();
         glAttachShader(this->Program, vertex);
-        glAttachShader(this->Program, fragment);
 		if (tessCtrlPath != NULL) glAttachShader(this->Program, tessControl);
 		if (tessEvalPath != NULL) glAttachShader(this->Program, tessEvaluation);
+		glAttachShader(this->Program, fragment);
         glLinkProgram(this->Program);
         // check linking errors
         checkCompileErrors(this->Program, "PROGRAM");

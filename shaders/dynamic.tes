@@ -1,0 +1,70 @@
+#version 410 core
+
+layout (quads, fractional_odd_spacing) in;
+
+uniform mat4 projection_matrix;
+
+in vec3 L_es[];
+in vec3 V_es[];
+
+out vec3 L;
+out vec3 V;
+out vec3 N;
+
+float fact[4] = {1.0, 1.0, 2.0, 6.0};
+
+int index(int deg, int row, int col) {
+	return ((deg + 1) * row) + col;
+}
+
+float binomial(int n, int i) {
+	return fact[n] / (fact[i] * (fact[n-i])); 
+}
+
+float bernstein(int n, int i, float t) {
+	return binomial(n, i) * pow(t, i) * pow(1 - t, n - i);
+}
+
+vec3 evaluatePartial(int n, float t, int otherDeg, float otherParam, bool orderIs_ij) {
+	vec3 partial = vec3(0.0);
+	for (int i = 0; i <= n; i++) {
+		float partialOfBi_first = 0.0;
+		float partialOfBi_last = 0.0;
+		if (i > 0)
+			partialOfBi_first = bernstein(n-1, i-1, t);
+		if (i < n)
+			partialOfBi_last = bernstein(n-1, i, t);
+		float partialOfBi = n * (partialOfBi_first - partialOfBi_last);
+		for (int j = 0; j <= otherDeg; j++) {
+			int loc = orderIs_ij ? index(n, i, j) : index(otherDeg, j, i);
+			vec4 pnt = gl_in[loc].gl_Position;
+			partial += partialOfBi * bernstein(otherDeg, j, otherParam) * pnt.xyz/pnt.w;
+		}
+	}
+	return partial;
+}
+
+void main() {
+	float u = gl_TessCoord[0];
+	float v = gl_TessCoord[1];
+
+	// Interpolate using Bezier formula
+	gl_Position = vec4(0.0);
+	L = vec3(0.0);
+	V = vec3(0.0);
+	for (int i = 0; i < 4; i++) {
+		for (int j = 0; j < 4; j++) {
+			gl_Position += bernstein(3, i, u) * bernstein(3, j, v) * gl_in[index(3, i, j)].gl_Position;
+			L += bernstein(3, i, u) * bernstein(3, j, v) * L_es[index(3, i, j)];
+			V += bernstein(3, i, u) * bernstein(3, j, v) * V_es[index(3, i, j)];
+		}
+	}
+
+	// Compute surface normals
+	vec3 dU = evaluatePartial(3, u, 3, v, true);
+	vec3 dV = evaluatePartial(3, v, 3, u, false);
+	N = normalize(cross(dU, dV));
+
+	// Move to clip space
+	gl_Position = projection_matrix * gl_Position;
+}

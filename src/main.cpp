@@ -17,6 +17,7 @@
 
 #include <utils/model.h>
 #include <utils/shader.h>
+#include <utils/bezier.h>
 
 // Disable Imgui demo windows to save compile time
 #define IMGUI_DISABLE_DEMO_WINDOWS
@@ -25,20 +26,21 @@ using namespace std;
 using namespace glm;
 
 ////////////////// CONSTANTS //////////////////
-const int screen_dimensions[2] = {1200, 900};
+const int screen_dimensions[2] = {1366, 768};
 
 const float movement_speed = 4.0f;
 const float rotation_speed = 30.0f;
 
 // diffusive, specular and ambient components
-GLfloat diffuseColor[] = {0.298f, 0.447f, 0.69f};
+GLfloat diffuseColor_static[] = {0.298f, 0.447f, 0.69f};
+GLfloat diffuseColor_dynamic[] = {0.866f, 0.517f, 0.321f};
 GLfloat specularColor[] = {1.0f, 1.0f, 1.0f};
 GLfloat ambientColor[] = {0.1f, 0.1f, 0.1f};
 
 // weights for the diffusive, specular and ambient components
-GLfloat Kd = 0.6f;
-GLfloat Ks = 0.4f;
-GLfloat Ka = 0.3f;
+GLfloat Kd = 0.5f;
+GLfloat Ks = 0.3f;
+GLfloat Ka = 0.2f;
 
 // shininess coefficient
 GLfloat shininess = 25.0f;
@@ -125,10 +127,13 @@ int main() {
     Model teapot_lod1("./models/teapot_surface1.obj", true);
     Model teapot_lod2("./models/teapot_surface2.obj", true);
     
+	// Load the Bezier representation of the teapot
+	Bezier teapot_bezier("./models/teapot_bezier.bpt");
+
     ////////////////// SHADERS //////////////////
     // Load the shader programs
-    Shader static_shader("shaders/static.vert", "shaders/static.frag");
-	// Shader dynamic_shader("shaders/dynamic.vert", "shaders/dynamic.frag", "shaders/dynamic.tcs", "shaders/dynamic.tes");
+    Shader static_shader("shaders/static.vert", "shaders/illumination.frag");
+	Shader dynamic_shader("shaders/dynamic.vert", "shaders/illumination.frag", "shaders/dynamic.tcs", "shaders/dynamic.tes");
 
     ////////////////// TRANSFORMS //////////////////
     // Projection and view matrices
@@ -137,13 +142,14 @@ int main() {
 
     // Model matrices
     mat4 static_model_matrix = mat4(1.0f);
+	mat4 dynamic_model_matrix = mat4(1.0f);
 	mat3 static_normal_matrix = mat3(1.0f);
 
     ////////////////// RENDERING LOOP //////////////////
     float delta_time, current_frame, last_frame = 0;
 
     int frame_count = 0;
-	int frame_limit = 25;
+	int frame_limit = 30;
     float time_accumulator = 0.0f;
 
 	float avg_frame_time_ms;
@@ -151,12 +157,12 @@ int main() {
 	vector<float> avg_times;
 	vector<int> lod_levels;
 
-    vec3 position = vec3(0.0f, -1.0f, -9.9f);
+    vec3 position = vec3(-3.5f, -1.0f, -5.0f);
     vec3 direction = vec3(0.0f, 0.0f, -1.0f);
 	float rotation_angle = 0.0f;
 
-	vec3 light_position = position;
-	vec3 light_offset = vec3(0.0f, 4.0f, 4.0f);
+	vec3 light_position = vec3(0.0f, 4.0f, -5.0f);
+	float light_offset_z = 4.0f;
 
     while (!glfwWindowShouldClose(window)) {
         
@@ -175,13 +181,13 @@ int main() {
 		if (movement) {
 			position += (movement_speed * delta_time) * direction;
 
-			if (position.z >= -1.0f) {
+			if (position.z >= -5.0f) {
 				direction = {0.0f, 0.0f, -1.0f};
-			} else if (position.z <= -37.0f) {
+			} else if (position.z <= -41.0f) {
 				direction = {0.0f, 0.0f, 1.0f};
 			}
 
-			light_position = position + light_offset;
+			light_position.z = position.z + light_offset_z;
 		}
 		if (rotation) {
 			rotation_angle += (rotation_speed * delta_time);
@@ -192,9 +198,9 @@ int main() {
 
 		// Select LOD level
 		int lod_level = 0;
-		if (position.z > -10.0f) {
+		if (position.z > -14.0f) {
             lod_level = 2;
-        } else if (position.z > -28.0f) {
+        } else if (position.z > -32.0f) {
             lod_level = 1;
 		}
 
@@ -208,7 +214,7 @@ int main() {
 		// Send matrices and uniforms
         glUniformMatrix4fv(glGetUniformLocation(static_shader.Program, "projection_matrix"), 1, GL_FALSE, value_ptr(projection));
         glUniformMatrix4fv(glGetUniformLocation(static_shader.Program, "view_matrix"), 1, GL_FALSE, value_ptr(view));
-		glUniform3fv(glGetUniformLocation(static_shader.Program, "diffuse_color"), 1, diffuseColor);
+		glUniform3fv(glGetUniformLocation(static_shader.Program, "diffuse_color"), 1, diffuseColor_static);
         glUniform3fv(glGetUniformLocation(static_shader.Program, "ambient_color"), 1, ambientColor);
         glUniform3fv(glGetUniformLocation(static_shader.Program, "specular_color"), 1, specularColor);
 		glUniform3fv(glGetUniformLocation(static_shader.Program, "light_position"), 1, value_ptr(light_position));
@@ -245,12 +251,34 @@ int main() {
             frame_count = 0;
         }
 
-			avg_times.push_back(avg_frame_time_ms);
-			lod_levels.push_back(lod_level);
-			if (int(avg_times.size()) > avg_times_max) {
-				avg_times.erase(avg_times.begin());
-				lod_levels.erase(lod_levels.begin());
-        }
+		avg_times.push_back(avg_frame_time_ms);
+		lod_levels.push_back(lod_level);
+		if (int(avg_times.size()) > avg_times_max) {
+			avg_times.erase(avg_times.begin());
+			lod_levels.erase(lod_levels.begin());
+		}
+
+		// Render Bezier
+		dynamic_shader.Use();
+		vec3 bezier_position = position + vec3(7.0f, 0.0f, 0.0f);
+
+		glUniformMatrix4fv(glGetUniformLocation(dynamic_shader.Program, "projection_matrix"), 1, GL_FALSE, value_ptr(projection));
+        glUniformMatrix4fv(glGetUniformLocation(dynamic_shader.Program, "view_matrix"), 1, GL_FALSE, value_ptr(view));
+		glUniform3fv(glGetUniformLocation(dynamic_shader.Program, "diffuse_color"), 1, diffuseColor_dynamic);
+        glUniform3fv(glGetUniformLocation(dynamic_shader.Program, "ambient_color"), 1, ambientColor);
+        glUniform3fv(glGetUniformLocation(dynamic_shader.Program, "specular_color"), 1, specularColor);
+		glUniform3fv(glGetUniformLocation(dynamic_shader.Program, "light_position"), 1, value_ptr(light_position));
+		glUniform1f(glGetUniformLocation(dynamic_shader.Program, "k_d"), Kd);
+		glUniform1f(glGetUniformLocation(dynamic_shader.Program, "k_s"), Ks);
+        glUniform1f(glGetUniformLocation(dynamic_shader.Program, "k_a"), Ka);
+        glUniform1f(glGetUniformLocation(dynamic_shader.Program, "shininess"), shininess);
+
+		dynamic_model_matrix = mat4(1.0f);
+        dynamic_model_matrix = translate(dynamic_model_matrix, bezier_position);
+		dynamic_model_matrix = rotate(dynamic_model_matrix, radians(180 + rotation_angle), vec3(0, -1, 0));
+        glUniformMatrix4fv(glGetUniformLocation(dynamic_shader.Program, "model_matrix"), 1, GL_FALSE, value_ptr(dynamic_model_matrix));
+
+		teapot_bezier.Draw();
 
 		// Setup GUI frame
         prepare_gui_frame(avg_times, lod_levels, avg_times_max);
