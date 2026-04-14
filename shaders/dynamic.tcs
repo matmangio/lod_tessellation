@@ -2,6 +2,9 @@
 
 layout (vertices = 16) out;
 
+uniform float tess_level_outer;
+uniform float tess_level_inner;
+
 in vec3 L_cs[];
 in vec3 V_cs[];
 
@@ -15,12 +18,11 @@ void main() {
 	V_es[gl_InvocationID] = V_cs[gl_InvocationID];
 
 	// Compute the level of detail for each patch
-	// TODO
-	gl_TessLevelOuter[0] = 15.0;
-	gl_TessLevelOuter[1] = 15.0;
-	gl_TessLevelOuter[2] = 15.0;
-	gl_TessLevelOuter[3] = 15.0;
+	gl_TessLevelOuter[0] = tess_level_outer;
+	gl_TessLevelOuter[1] = tess_level_outer;
+	gl_TessLevelOuter[2] = tess_level_outer;
+	gl_TessLevelOuter[3] = tess_level_outer;
 
-	gl_TessLevelInner[0] = 10.0;
-	gl_TessLevelInner[1] = 10.0;
+	gl_TessLevelInner[0] = tess_level_inner;
+	gl_TessLevelInner[1] = tess_level_inner;
 }

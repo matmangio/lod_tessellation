@@ -27,23 +27,32 @@ using namespace glm;
 
 ////////////////// CONSTANTS //////////////////
 const int screen_dimensions[2] = {1366, 768};
+const int window_position[2] = {100, 100};
 
 const float movement_speed = 4.0f;
 const float rotation_speed = 30.0f;
 
 // diffusive, specular and ambient components
-GLfloat diffuseColor_static[] = {0.298f, 0.447f, 0.69f};
-GLfloat diffuseColor_dynamic[] = {0.866f, 0.517f, 0.321f};
-GLfloat specularColor[] = {1.0f, 1.0f, 1.0f};
-GLfloat ambientColor[] = {0.1f, 0.1f, 0.1f};
+const GLfloat diffuseColor_static[] = {0.298f, 0.447f, 0.69f};
+const GLfloat diffuseColor_dynamic[] = {0.866f, 0.517f, 0.321f};
+const GLfloat specularColor[] = {1.0f, 1.0f, 1.0f};
+const GLfloat ambientColor[] = {0.1f, 0.1f, 0.1f};
 
 // weights for the diffusive, specular and ambient components
-GLfloat Kd = 0.5f;
-GLfloat Ks = 0.3f;
-GLfloat Ka = 0.2f;
+const GLfloat Kd = 0.5f;
+const GLfloat Ks = 0.3f;
+const GLfloat Ka = 0.2f;
 
 // shininess coefficient
-GLfloat shininess = 25.0f;
+const GLfloat shininess = 25.0f;
+
+// tessellation coefficients (min - max)
+const GLfloat tess_levels_outer[2] = {10.0f, 64.0f};
+const GLfloat tess_levels_inner[2] = {5.0f, 32.0f};
+
+// lod distances
+const GLfloat min_max_distance[2] = {-5.0f, -41.0f};
+const GLfloat lod_switch_distances[2] = {-14.0f, -32.0f};
 
 ////////////////// FLAGS //////////////////
 bool wireframe = false;
@@ -53,10 +62,11 @@ bool rotation = true;
 ////////////////// SIGNATURES //////////////////
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mode);
 
-void prepare_gui_frame(const vector<float> &frame_times, const vector<int> &lod_levels, int max_len);
+void prepare_gui_frame(const vector<float> &static_avg_times, const vector<float> &dynamic_avg_times, const vector<int> &lod_levels, const vector<int> &bezier_trigs, int max_len);
 int k_formatter(double value, char* buff, int size, void* data);
 
 bool file_exists(const string& path);
+int round_to_odd(float t);
 void convert_norm_to_obj(const string& norm_path);
 
 ////////////////// MAIN FUNCTION //////////////////
@@ -68,15 +78,19 @@ int main() {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+	glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
     // Create GLFW window
-    GLFWwindow* window = glfwCreateWindow(screen_dimensions[0], screen_dimensions[1], "Tessellation", nullptr, nullptr);
+    GLFWwindow* window = glfwCreateWindow(screen_dimensions[0], screen_dimensions[1], "Static vs Dynamic LOD", nullptr, nullptr);
     if (window == NULL) {
         cout << "Failed to create GLFW window. Terminating..." << endl;
         glfwTerminate();
         return -1; 
     }
     glfwMakeContextCurrent(window);
+
+	// Move window to specified coordinates
+	glfwSetWindowPos(window, window_position[0], window_position[1]);
 
     // Link callbacks
     glfwSetKeyCallback(window, key_callback);
@@ -137,8 +151,9 @@ int main() {
 
     ////////////////// TRANSFORMS //////////////////
     // Projection and view matrices
+	vec3 eye_world_position = vec3(0.0f, 5.0f, 7.0f);
     mat4 projection = perspective(45.0f, (float) screen_width / (float) screen_height, 0.1f, 10000.0f);
-    mat4 view = lookAt(vec3(0.0f, 5.0f, 7.0f), vec3(0.0f, 0.0f, -7.0f), vec3(0.0f, 1.0f, 0.0f));
+    mat4 view = lookAt(eye_world_position, vec3(0.0f, 0.0f, -7.0f), vec3(0.0f, 1.0f, 0.0f));
 
     // Model matrices
     mat4 static_model_matrix = mat4(1.0f);
@@ -150,19 +165,28 @@ int main() {
 
     int frame_count = 0;
 	int frame_limit = 30;
-    float time_accumulator = 0.0f;
+    float static_time_accumulator = 0.0f;
+	float dynamic_time_accumulator = 0.0f;
 
-	float avg_frame_time_ms;
+	float static_avg_render_time;
+	float dynamic_avg_render_time;
 	int avg_times_max = 2500;
-	vector<float> avg_times;
+	vector<float> static_avg_times;
+	vector<float> dynamic_avg_times;
 	vector<int> lod_levels;
+	vector<int> bezier_trigs;
 
-    vec3 position = vec3(-3.5f, -1.0f, -5.0f);
+    vec3 position = vec3(-3.5f, -1.0f, min_max_distance[0]);
     vec3 direction = vec3(0.0f, 0.0f, -1.0f);
 	float rotation_angle = 0.0f;
 
-	vec3 light_position = vec3(0.0f, 4.0f, -5.0f);
+	vec3 light_position = vec3(0.0f, 4.0f, min_max_distance[0]);
 	float light_offset_z = 4.0f;
+
+	GLfloat min_max_distance_from_eye[2] = {
+		distance(position, eye_world_position), 
+		distance(position + vec3(0.0f, 0.0f, min_max_distance[1] - min_max_distance[0]), eye_world_position)
+	};
 
     while (!glfwWindowShouldClose(window)) {
         
@@ -181,9 +205,9 @@ int main() {
 		if (movement) {
 			position += (movement_speed * delta_time) * direction;
 
-			if (position.z >= -5.0f) {
+			if (position.z >= min_max_distance[0]) {
 				direction = {0.0f, 0.0f, -1.0f};
-			} else if (position.z <= -41.0f) {
+			} else if (position.z <= min_max_distance[1]) {
 				direction = {0.0f, 0.0f, 1.0f};
 			}
 
@@ -198,18 +222,18 @@ int main() {
 
 		// Select LOD level
 		int lod_level = 0;
-		if (position.z > -14.0f) {
+		if (position.z > lod_switch_distances[0]) {
             lod_level = 2;
-        } else if (position.z > -32.0f) {
+        } else if (position.z > lod_switch_distances[1]) {
             lod_level = 1;
 		}
 
 		// Select the Static Shader
 		static_shader.Use();
 
-		// Save time for render_time computation
+		// Start static time computation
 		glFinish();
-		float start_time_static = glfwGetTime();
+		float static_start_time = glfwGetTime();
 
 		// Send matrices and uniforms
         glUniformMatrix4fv(glGetUniformLocation(static_shader.Program, "projection_matrix"), 1, GL_FALSE, value_ptr(projection));
@@ -239,28 +263,22 @@ int main() {
             teapot_lod0.Draw();
         }
 
-		// Update avg_frame_time_ms
+		// Stop static time computation
 		glFinish();
-		float render_time = (glfwGetTime() - start_time_static) * 1000;
+		float static_render_time = (glfwGetTime() - static_start_time) * 1000;
 		
-		frame_count++;
-		time_accumulator += render_time;
-        if (frame_count >= frame_limit) {
-            avg_frame_time_ms = (time_accumulator / frame_limit);
-            time_accumulator = 0;
-            frame_count = 0;
-        }
-
-		avg_times.push_back(avg_frame_time_ms);
-		lod_levels.push_back(lod_level);
-		if (int(avg_times.size()) > avg_times_max) {
-			avg_times.erase(avg_times.begin());
-			lod_levels.erase(lod_levels.begin());
-		}
+		// Start dynamic time computation
+		float dynamic_start_time = glfwGetTime();
 
 		// Render Bezier
 		dynamic_shader.Use();
 		vec3 bezier_position = position + vec3(7.0f, 0.0f, 0.0f);
+
+		// Compute tessellation levels
+		float distance_from_eye = distance(position, eye_world_position);
+		float t = (distance_from_eye - min_max_distance_from_eye[0]) / (min_max_distance_from_eye[1] - min_max_distance_from_eye[0]);
+		float current_tess_level_outer = tess_levels_outer[0] * t + tess_levels_outer[1] * (1 - t);
+		float current_tess_level_inner = tess_levels_inner[0] * t + tess_levels_inner[1] * (1 - t);
 
 		glUniformMatrix4fv(glGetUniformLocation(dynamic_shader.Program, "projection_matrix"), 1, GL_FALSE, value_ptr(projection));
         glUniformMatrix4fv(glGetUniformLocation(dynamic_shader.Program, "view_matrix"), 1, GL_FALSE, value_ptr(view));
@@ -273,6 +291,9 @@ int main() {
         glUniform1f(glGetUniformLocation(dynamic_shader.Program, "k_a"), Ka);
         glUniform1f(glGetUniformLocation(dynamic_shader.Program, "shininess"), shininess);
 
+		glUniform1f(glGetUniformLocation(dynamic_shader.Program, "tess_level_outer"), current_tess_level_outer);
+		glUniform1f(glGetUniformLocation(dynamic_shader.Program, "tess_level_inner"), current_tess_level_inner);
+
 		dynamic_model_matrix = mat4(1.0f);
         dynamic_model_matrix = translate(dynamic_model_matrix, bezier_position);
 		dynamic_model_matrix = rotate(dynamic_model_matrix, radians(180 + rotation_angle), vec3(0, -1, 0));
@@ -280,8 +301,41 @@ int main() {
 
 		teapot_bezier.Draw();
 
+		// Stop dynamic time computation
+		glFinish();
+		float dynamic_render_time = (glfwGetTime() - dynamic_start_time) * 1000;
+
+		// Update UI
+		frame_count++;
+		static_time_accumulator += static_render_time;
+		dynamic_time_accumulator += dynamic_render_time;
+        if (frame_count >= frame_limit) {
+            static_avg_render_time = (static_time_accumulator / frame_limit);
+			dynamic_avg_render_time = (dynamic_time_accumulator / frame_limit);
+
+            static_time_accumulator = 0;
+			dynamic_time_accumulator = 0;
+            frame_count = 0;
+        }
+
+		int odd_tess_level_outer = round_to_odd(current_tess_level_outer);
+		int odd_tess_level_inner = round_to_odd(current_tess_level_inner);
+		int trigs_per_patch = 4 * (odd_tess_level_outer + odd_tess_level_inner - 2) + 2 * pow(odd_tess_level_inner - 2, 2);
+		int trigs = teapot_bezier.patches * trigs_per_patch;
+
+		static_avg_times.push_back(static_avg_render_time);
+		dynamic_avg_times.push_back(dynamic_avg_render_time);
+		lod_levels.push_back(lod_level);
+		bezier_trigs.push_back(trigs);
+		if (int(static_avg_times.size()) > avg_times_max) {
+			static_avg_times.erase(static_avg_times.begin());
+			dynamic_avg_times.erase(dynamic_avg_times.begin());
+			lod_levels.erase(lod_levels.begin());
+			bezier_trigs.erase(bezier_trigs.begin());
+		}
+
 		// Setup GUI frame
-        prepare_gui_frame(avg_times, lod_levels, avg_times_max);
+        prepare_gui_frame(static_avg_times, dynamic_avg_times, lod_levels, bezier_trigs, avg_times_max);
 
         // Render GUI on top
         ImGui::Render();
@@ -328,7 +382,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 
 ////////////////// GUI FUNCTIONS //////////////////
 
-void prepare_gui_frame(const vector<float> &avg_times, const vector<int> &lod_levels, int max_len) {
+void prepare_gui_frame(const vector<float> &static_avg_times, const vector<float> &dynamic_avg_times, const vector<int> &lod_levels, const vector<int> &bezier_trigs, int max_len) {
     // Setup new GUI frame
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
@@ -343,7 +397,7 @@ void prepare_gui_frame(const vector<float> &avg_times, const vector<int> &lod_le
 
 	// Find LOD changes
 	vector<int> lod_changes;
-	lod_changes.push_back(0);
+	// lod_changes.push_back(0);
 
 	for (int i = 1; i < int(lod_levels.size()) - 1; i++) {
 		if (lod_levels[i] != lod_levels[i+1]) {
@@ -352,10 +406,10 @@ void prepare_gui_frame(const vector<float> &avg_times, const vector<int> &lod_le
 	}
 
 	// Compute triangle counts
-	vector<int> triangle_counts;
+	vector<int> static_triangle_counts;
 	for (int i = 0; i < int(lod_levels.size()); i++) {
 		int trigs = (lod_levels[i] == 0)? 5144 : ((lod_levels[i] == 1))? 22885 : 158865;
-		triangle_counts.push_back(trigs);
+		static_triangle_counts.push_back(trigs);
 	}
 
     // Init window
@@ -369,16 +423,24 @@ void prepare_gui_frame(const vector<float> &avg_times, const vector<int> &lod_le
 		ImPlot::SetupAxisLimitsConstraints(ImAxis_Y1, 0.0, INFINITY);
 		ImPlot::SetupAxisFormat(ImAxis_Y1, "%.2f");
 
+		// Setup legend
+		ImPlotLegendFlags legend_flags = ImPlotLegendFlags_Horizontal;
+		ImPlot::SetupLegend(ImPlotLocation_NorthWest, legend_flags);
+
+		ImVec4 static_color;
 		ImPlotSpec specs;
 		specs.FillAlpha = 0.25f;
 		specs.Flags = ImPlotLineFlags_Shaded;
 
-		if (int(avg_times.size()) > 0) {
-			ImPlot::PlotLine("Static LOD", &avg_times[0], int(avg_times.size()), 1.0, 0.0, specs);
+		if (int(static_avg_times.size()) > 0) {
+			ImPlot::PlotLine("Static", &static_avg_times[0], int(static_avg_times.size()), 1.0, 0.0, specs);
+			static_color = ImPlot::GetLastItemColor();
+			ImPlot::PlotLine("Dynamic", &dynamic_avg_times[0], int(dynamic_avg_times.size()), 1.0, 0.0, specs);
 		}
 
+		// Display LOD lines
 		if (int(lod_levels.size()) > 0) {
-			specs.LineColor = ImPlot::GetLastItemColor();
+			specs.LineColor = static_color;
 			ImPlot::PlotInfLines("##LOD Changes", &lod_changes[0], int(lod_changes.size()), specs);
 
 			for (int i = 0; i < int(lod_changes.size()); i++) {
@@ -395,11 +457,17 @@ void prepare_gui_frame(const vector<float> &avg_times, const vector<int> &lod_le
 		ImPlot::SetupAxisFormat(ImAxis_X1, "");
 		ImPlot::SetupAxisFormat(ImAxis_Y1, k_formatter);
 
+		ImPlotLegendFlags legend_flags = ImPlotLegendFlags_Horizontal;
+		ImPlot::SetupLegend(ImPlotLocation_NorthWest, legend_flags);
+
 		ImPlotSpec specs;
 		specs.FillAlpha = 0.25f;
 		specs.Flags = ImPlotStairsFlags_Shaded;
 
-		ImPlot::PlotStairs("Static LOD", &triangle_counts[0], int(triangle_counts.size()), 1.0, 0.0, specs);
+		ImPlot::PlotStairs("Static", &static_triangle_counts[0], int(static_triangle_counts.size()), 1.0, 0.0, specs);
+
+		specs.Flags = ImPlotLineFlags_Shaded;
+		ImPlot::PlotLine("Dynamic", &bezier_trigs[0], int(bezier_trigs.size()), 1.0, 0.0, specs);
 
 		ImPlot::EndPlot();
 	}
@@ -421,6 +489,11 @@ int k_formatter(double value, char* buff, int size, void* data) {
 bool file_exists(const string& path) {
     ifstream f(path);
     return f.good();
+}
+
+int round_to_odd(float t) {
+	int res = int(ceil(t));
+	return (res % 2 == 0)? res + 1 : res;
 }
 
 void convert_norm_to_obj(const string& obj_path) {
