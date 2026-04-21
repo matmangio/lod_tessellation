@@ -124,12 +124,18 @@ public:
     //////////////////////////////////////////
 
     // rendering of mesh
-    void Draw()
+    void Draw(bool is_patch = false)
     {
         // VAO is made "active"
         glBindVertexArray(this->VAO);
         // rendering of data in the VAO
-        glDrawElements(GL_TRIANGLES, this->indices.size(), GL_UNSIGNED_INT, 0);
+		if (!is_patch) {
+			glDrawElements(GL_TRIANGLES, this->indices.size(), GL_UNSIGNED_INT, 0);
+		} else {
+			glPatchParameteri(GL_PATCH_VERTICES, 3);
+			glDrawElements(GL_PATCHES, this->indices.size(), GL_UNSIGNED_INT, 0);
+		}
+        
         // VAO is "detached"
         glBindVertexArray(0);
     }

@@ -1,0 +1,42 @@
+#version 410 core
+
+layout (vertices = 3) out;
+
+uniform float tess_level_outer;
+uniform float tess_level_inner;
+
+in vec3 L_cs[];
+in vec3 V_cs[];
+in vec3 N_cs[];
+
+out vec3 L_es[];
+out vec3 V_es[];
+out vec3 N_es[];
+
+bool is_backfacing() {
+	bool b0 = dot(N_cs[0], V_cs[0]) < -0.5;
+	bool b1 = dot(N_cs[1], V_cs[1]) < -0.5;
+	bool b2 = dot(N_cs[2], V_cs[2]) < -0.5;
+	return b0 && b1 && b2;
+}
+
+void main() {
+	// Send forward values for each control point
+	gl_out[gl_InvocationID].gl_Position = gl_in[gl_InvocationID].gl_Position;
+	L_es[gl_InvocationID] = L_cs[gl_InvocationID];
+	V_es[gl_InvocationID] = V_cs[gl_InvocationID];
+	N_es[gl_InvocationID] = N_cs[gl_InvocationID];
+
+	// Compute the level of detail for each patch
+	if (is_backfacing()) {
+		gl_TessLevelOuter[0] = 0;
+		gl_TessLevelOuter[1] = 0;
+		gl_TessLevelOuter[2] = 0;
+	} else {
+		gl_TessLevelOuter[0] = tess_level_outer;
+		gl_TessLevelOuter[1] = tess_level_outer;
+		gl_TessLevelOuter[2] = tess_level_outer;
+	}
+
+	gl_TessLevelInner[0] = tess_level_inner;
+}
