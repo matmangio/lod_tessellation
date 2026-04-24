@@ -13,50 +13,58 @@
 #include <imgui/imgui_impl_glfw.h>
 #include <imgui/imgui_impl_opengl3.h>
 #include <imgui/implot.h>
-#include <imgui/implot_internal.h>
 
 #include <utils/model.h>
 #include <utils/shader.h>
 #include <utils/bezier.h>
-
-// Disable Imgui demo windows to save compile time
-#define IMGUI_DISABLE_DEMO_WINDOWS
+#include <utils/gui.h>
 
 using namespace std;
 using namespace glm;
 
-////////////////// CONSTANTS //////////////////
-const int screen_dimensions[2] = {1500, 768};
-const int window_position[2] = {100, 100};
+// Disable Imgui demo windows to save compile time
+#define IMGUI_DISABLE_DEMO_WINDOWS
 
+// Define indices for different LOD types
+#define STATIC 0
+#define DYNAMIC 1
+#define BEZIER 2
+
+////////////////// CONSTANTS //////////////////
+// Window parameters
+const int screen_dimensions[2] = {1920, 1080};
+const int window_position[2] = {0, 0};
+const vec3 clear_color = {0.6, 0.6, 0.6};
+
+// Movement parameters
 const float movement_speed = 4.0f;
 const float rotation_speed = 30.0f;
 
-// diffusive, specular and ambient components
-const GLfloat diffuseColor_static[] = {0.298f, 0.447f, 0.69f};
-const GLfloat diffuseColor_bezier[] = {0.866f, 0.517f, 0.321f};
-const GLfloat diffuseColor_dynamic[] = {0.333f, 0.658f, 0.407f};
-const GLfloat specularColor[] = {1.0f, 1.0f, 1.0f};
-const GLfloat ambientColor[] = {0.1f, 0.1f, 0.1f};
-
-// weights for the diffusive, specular and ambient components
+// Lighting parameters
+const GLfloat diffuse_color[3][3] = {
+	{0.298f, 0.447f, 0.69f},
+	{0.866f, 0.517f, 0.321f},
+	{0.333f, 0.658f, 0.407f}
+};
+const GLfloat specular_color[3] = {1.0f, 1.0f, 1.0f};
+const GLfloat ambient_color[3] = {0.1f, 0.1f, 0.1f};
 const GLfloat Kd = 0.5f;
 const GLfloat Ks = 0.3f;
 const GLfloat Ka = 0.2f;
-
-// shininess coefficient
 const GLfloat shininess = 25.0f;
 
-// tessellation coefficients (min - max)
-const GLfloat tess_levels_outer[2] = {10.0f, 64.0f};
-const GLfloat tess_levels_inner[2] = {5.0f, 32.0f};
-
-const GLfloat tess_levels_outer_dynamic[2] = {0.5f, 5.5f};
-const GLfloat tess_levels_inner_dynamic[2] = {-1.0f, 2.0f};
-
-// lod distances
-const GLfloat min_max_distance[2] = {-5.0f, -41.0f};
-const GLfloat lod_switch_distances[2] = {-14.0f, -32.0f};
+// LOD and Tessellation parameters (min - max)
+const GLfloat tess_extremes_outer[3][2] = {
+	{0.0f, 2.0f},	// STATIC
+	{0.1f, 4.9f},	// DYNAMIC
+	{3.0f, 64.0f}	// BEZIER
+};
+const GLfloat tess_extremes_inner[3][2] = {
+	{0.0f, 2.0f},	// STATIC
+	{1.0f, 1.0f},	// DYNAMIC
+	{3.0f, 32.0f}	// BEZIER
+};
+const GLfloat min_max_distance[2] = {-8.0f, -50.0f};
 
 ////////////////// FLAGS //////////////////
 bool wireframe = true;
@@ -67,12 +75,12 @@ bool display_lods_in_gui = false;
 ////////////////// SIGNATURES //////////////////
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mode);
 
-void prepare_gui_frame(const vector<float> &static_avg_times, const vector<float> &bezier_avg_times, const vector<float> &dynamic_avg_times, const vector<int> &lod_levels, const vector<int> &bezier_trigs, const vector<int> &dynamic_trigs, int max_len);
-int k_formatter(double value, char* buff, int size, void* data);
+float average_time(vector<float> vec);
+void poll_time_queries(GLuint query_id, vector<float> &accumulator, int *index);
 
+int get_triangle_count(int tech, float tess_level_outer, float tess_level_inner);
 bool file_exists(const string& path);
 int round_to_odd(float t);
-int trigs_inner_triangle(int current);
 void convert_norm_to_obj(const string& norm_path);
 
 ////////////////// MAIN FUNCTION //////////////////
@@ -84,6 +92,8 @@ int main() {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+
+	// Make window non-resizable
 	glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
     // Create GLFW window
@@ -98,7 +108,7 @@ int main() {
 	// Move window to specified coordinates
 	glfwSetWindowPos(window, window_position[0], window_position[1]);
 
-    // Link callbacks
+    // Link keyboard callback
     glfwSetKeyCallback(window, key_callback);
 
     // Load the GLFW context in GLAD
@@ -113,27 +123,28 @@ int main() {
     glViewport(0, 0, screen_width, screen_height);
 
 	////////////////// OPENGL INITIALIZATION //////////////////
-
 	// Enable the Z check
 	glEnable(GL_DEPTH_TEST);
 
     // Set clear color
-    glClearColor(0.4, 0.4, 0.4, 1.0);
+    glClearColor(clear_color.x, clear_color.y, clear_color.z, 1.0);
 
+	// Set wireframe mode
 	if (wireframe) {
 		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 	}
 
     ////////////////// GUI INITIALIZATION //////////////////
-    // Setup ImGui context and options
+    // Setup ImGui and ImPlot contexts
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
 	ImPlot::CreateContext();
 
+	// Disable keyboard navigation in UI
     ImGuiIO& io = ImGui::GetIO();
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    io.ConfigFlags |= ImGuiConfigFlags_NoKeyboard;
 
-    // Connect to GLFW window
+    // Connect ImGui to GLFW window
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init();
 
@@ -159,40 +170,38 @@ int main() {
     Shader static_shader("shaders/static.vert", "shaders/illumination.frag");
 	Shader dynamic_shader("shaders/dynamic.vert", "shaders/illumination.frag", "shaders/dynamic.tcs", "shaders/dynamic.tes");
 	Shader bezier_shader("shaders/bezier.vert", "shaders/illumination.frag", "shaders/bezier.tcs", "shaders/bezier.tes");
+	Shader shaders[3] = {static_shader, dynamic_shader, bezier_shader};
 
     ////////////////// TRANSFORMS //////////////////
     // Projection and view matrices
-	vec3 eye_world_position = vec3(0.0f, 5.0f, 7.0f);
+	vec3 eye_world_position = vec3(0.0f, 0.0f, 7.0f);
     mat4 projection = perspective(45.0f, (float) screen_width / (float) screen_height, 0.1f, 10000.0f);
-    mat4 view = lookAt(eye_world_position, vec3(0.0f, 0.0f, -7.0f), vec3(0.0f, 1.0f, 0.0f));
+    mat4 view = lookAt(eye_world_position, vec3(0.0f, 0.0f, -1.0f), vec3(0.0f, 1.0f, 0.0f));
 
-    // Model matrices
-    mat4 static_model_matrix = mat4(1.0f);
-	mat4 bezier_model_matrix = mat4(1.0f);
-	mat4 dynamic_model_matrix = mat4(1.0f);
+    // Model and normal matrices
+	mat4 model_matrix = mat4(1.0f);
 	mat3 normal_matrix = mat3(1.0f);
 
     ////////////////// RENDERING LOOP //////////////////
-    float delta_time, current_frame, last_frame = 0;
+    float delta_time, current_frame = 0, last_frame = 0;
 
-    int frame_count = 0;
-	int frame_limit = 30;
-    float static_time_accumulator = 0.0f;
-	float bezier_time_accumulator = 0.0f;
-	float dynamic_time_accumulator = 0.0f;
+	int frame_limit = 20;
+	int time_accumulator_idx[3] {0};
+    vector<float> time_accumulator[3];
+	int triangle_count[3];
+	for (int i = 0; i < frame_limit; i++) {
+		for (int i = STATIC; i <= BEZIER; i++) {
+			time_accumulator[i].push_back(-1.0f);
+		}
+	}
 
-	float static_avg_render_time;
-	float bezier_avg_render_time;
-	float dynamic_avg_render_time;
-	int avg_times_max = 2500;
-	vector<float> static_avg_times;
-	vector<float> bezier_avg_times;
-	vector<float> dynamic_avg_times;
-	vector<int> lod_levels;
-	vector<int> bezier_trigs;
-	vector<int> dynamic_trigs;
+	float time_window = 15.0f;
+	vector<float> avg_times[3];
+	vector<int> trigs[3];
+	vector<float> timestamps;
 
-    vec3 position = vec3(-3.5f, -1.0f, min_max_distance[0]);
+    vec3 position = vec3(-7.0f, -1.0f, min_max_distance[0]);
+	vec3 position_offset = vec3{7.0f, 0.0f, 0.0f};
     vec3 direction = vec3(0.0f, 0.0f, -1.0f);
 	float rotation_angle = 0.0f;
 
@@ -200,7 +209,6 @@ int main() {
 	vec3 light_position = position + light_offset;
 
     while (!glfwWindowShouldClose(window)) {
-        
         // Compute delta time
         current_frame = glfwGetTime();
         delta_time = current_frame - last_frame;
@@ -212,10 +220,11 @@ int main() {
         // Clear the color and depth buffers
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // Update position and rotation if movement is true
+        // Update position and rotation according to the respective flags
 		if (movement) {
 			position += (movement_speed * delta_time) * direction;
 
+			// Change direction at the extremities
 			if (position.z >= min_max_distance[0]) {
 				direction = {0.0f, 0.0f, -1.0f};
 			} else if (position.z <= min_max_distance[1]) {
@@ -228,185 +237,98 @@ int main() {
 				rotation_angle -= 360.0f;
 			}
 		}
-		light_position = position + light_offset;
 
-		// Select LOD level
-		int lod_level = 0;
-		if (position.z > lod_switch_distances[0]) {
-            lod_level = 2;
-        } else if (position.z > lod_switch_distances[1]) {
-            lod_level = 1;
-		}
+		// Generate queries for time computations
+		GLuint time_queries_ids[3];
+		glGenQueries(3, time_queries_ids);
 
-		// Select the Static Shader
-		static_shader.Use();
+		// Render each model
+		for (int tech = STATIC; tech <= BEZIER; tech++) {
+			// Update model and light positions
+			vec3 model_position = position + position_offset * (float) tech;
+			light_position = position + light_offset;
 
-		// Start static time computation
-		glFinish();
-		float static_start_time = glfwGetTime();
+			// Select LOD/tessellation level
+			float t = (position.z - min_max_distance[0]) / (min_max_distance[1] - min_max_distance[0]);
+			float tess_level_outer = tess_extremes_outer[tech][0] * t + tess_extremes_outer[tech][1] * (1 - t);
+			float tess_level_inner = tess_extremes_inner[tech][0] * t + tess_extremes_inner[tech][1] * (1 - t);
 
-		// Send matrices and uniforms
-        glUniformMatrix4fv(glGetUniformLocation(static_shader.Program, "projection_matrix"), 1, GL_FALSE, value_ptr(projection));
-        glUniformMatrix4fv(glGetUniformLocation(static_shader.Program, "view_matrix"), 1, GL_FALSE, value_ptr(view));
-		glUniform3fv(glGetUniformLocation(static_shader.Program, "diffuse_color"), 1, diffuseColor_static);
-        glUniform3fv(glGetUniformLocation(static_shader.Program, "ambient_color"), 1, ambientColor);
-        glUniform3fv(glGetUniformLocation(static_shader.Program, "specular_color"), 1, specularColor);
-		glUniform3fv(glGetUniformLocation(static_shader.Program, "light_position"), 1, value_ptr(light_position));
-		glUniform1f(glGetUniformLocation(static_shader.Program, "k_d"), Kd);
-		glUniform1f(glGetUniformLocation(static_shader.Program, "k_s"), Ks);
-        glUniform1f(glGetUniformLocation(static_shader.Program, "k_a"), Ka);
-        glUniform1f(glGetUniformLocation(static_shader.Program, "shininess"), shininess);
+			// Select the appropriate shader
+			shaders[tech].Use();
 
-        static_model_matrix = mat4(1.0f);
-		normal_matrix = mat3(1.0f);
-        static_model_matrix = translate(static_model_matrix, position);
-		static_model_matrix = rotate(static_model_matrix, radians(rotation_angle), vec3(0, 1, 0));
-		normal_matrix = inverseTranspose(mat3(view * static_model_matrix));
-        glUniformMatrix4fv(glGetUniformLocation(static_shader.Program, "model_matrix"), 1, GL_FALSE, value_ptr(static_model_matrix));
-		glUniformMatrix3fv(glGetUniformLocation(static_shader.Program, "normal_matrix"), 1, GL_FALSE, value_ptr(normal_matrix));
+			// Start the computation for the render time
+			glBeginQuery(GL_TIME_ELAPSED, time_queries_ids[tech]);
 
-        if (lod_level == 2) {
-            teapot_lod2.Draw();
-        } else if (lod_level == 1) {
-            teapot_lod1.Draw();
-        } else {
-            teapot_lod0.Draw();
-        }
+			// Send matrices and uniforms
+        	glUniformMatrix4fv(glGetUniformLocation(shaders[tech].Program, "projection_matrix"), 1, GL_FALSE, value_ptr(projection));
+        	glUniformMatrix4fv(glGetUniformLocation(shaders[tech].Program, "view_matrix"), 1, GL_FALSE, value_ptr(view));
+			glUniform3fv(glGetUniformLocation(shaders[tech].Program, "diffuse_color"), 1, diffuse_color[tech]);
+        	glUniform3fv(glGetUniformLocation(shaders[tech].Program, "ambient_color"), 1, ambient_color);
+        	glUniform3fv(glGetUniformLocation(shaders[tech].Program, "specular_color"), 1, specular_color);
+			glUniform3fv(glGetUniformLocation(shaders[tech].Program, "light_position"), 1, value_ptr(light_position));
+			glUniform1f(glGetUniformLocation(shaders[tech].Program, "k_d"), Kd);
+			glUniform1f(glGetUniformLocation(shaders[tech].Program, "k_s"), Ks);
+        	glUniform1f(glGetUniformLocation(shaders[tech].Program, "k_a"), Ka);
+        	glUniform1f(glGetUniformLocation(shaders[tech].Program, "shininess"), shininess);
 
-		// Stop static time computation
-		glFinish();
-		float static_render_time = (glfwGetTime() - static_start_time) * 1000;
-		
-		// Setup for Bezier rendering
-		bezier_shader.Use();
-		vec3 bezier_position = position + vec3(7.0f, 0.0f, 0.0f);
-		light_position = bezier_position + light_offset;
+			glUniform1f(glGetUniformLocation(shaders[tech].Program, "tess_level_outer"), tess_level_outer);
+			glUniform1f(glGetUniformLocation(shaders[tech].Program, "tess_level_inner"), tess_level_inner);
 
-		float t = (bezier_position.z - min_max_distance[0]) / (min_max_distance[1] - min_max_distance[0]);
-		float current_tess_level_outer = tess_levels_outer[0] * t + tess_levels_outer[1] * (1 - t);
-		float current_tess_level_inner = tess_levels_inner[0] * t + tess_levels_inner[1] * (1 - t);
+			// Compute and send the model and normal matrices
+        	model_matrix = mat4(1.0f);
+			normal_matrix = mat3(1.0f);
+        	model_matrix = translate(model_matrix, model_position);
+			model_matrix = rotate(model_matrix, radians(rotation_angle), vec3(0, 1, 0));
+			normal_matrix = inverseTranspose(mat3(view * model_matrix));
 
-		// Start dynamic time computation
-		float bezier_start_time = glfwGetTime();
+        	glUniformMatrix4fv(glGetUniformLocation(shaders[tech].Program, "model_matrix"), 1, GL_FALSE, value_ptr(model_matrix));
+			glUniformMatrix3fv(glGetUniformLocation(shaders[tech].Program, "normal_matrix"), 1, GL_FALSE, value_ptr(normal_matrix));
 
-		glUniformMatrix4fv(glGetUniformLocation(bezier_shader.Program, "projection_matrix"), 1, GL_FALSE, value_ptr(projection));
-        glUniformMatrix4fv(glGetUniformLocation(bezier_shader.Program, "view_matrix"), 1, GL_FALSE, value_ptr(view));
-		glUniform3fv(glGetUniformLocation(bezier_shader.Program, "diffuse_color"), 1, diffuseColor_bezier);
-        glUniform3fv(glGetUniformLocation(bezier_shader.Program, "ambient_color"), 1, ambientColor);
-        glUniform3fv(glGetUniformLocation(bezier_shader.Program, "specular_color"), 1, specularColor);
-		glUniform3fv(glGetUniformLocation(bezier_shader.Program, "light_position"), 1, value_ptr(light_position));
-		glUniform1f(glGetUniformLocation(bezier_shader.Program, "k_d"), Kd);
-		glUniform1f(glGetUniformLocation(bezier_shader.Program, "k_s"), Ks);
-        glUniform1f(glGetUniformLocation(bezier_shader.Program, "k_a"), Ka);
-        glUniform1f(glGetUniformLocation(bezier_shader.Program, "shininess"), shininess);
-
-		glUniform1f(glGetUniformLocation(bezier_shader.Program, "tess_level_outer"), current_tess_level_outer);
-		glUniform1f(glGetUniformLocation(bezier_shader.Program, "tess_level_inner"), current_tess_level_inner);
-
-		bezier_model_matrix = mat4(1.0f);
-        bezier_model_matrix = translate(bezier_model_matrix, bezier_position);
-		bezier_model_matrix = rotate(bezier_model_matrix, radians(rotation_angle), vec3(0, 1, 0));
-        glUniformMatrix4fv(glGetUniformLocation(bezier_shader.Program, "model_matrix"), 1, GL_FALSE, value_ptr(bezier_model_matrix));
-
-		teapot_bezier.Draw();
-
-		// Stop dynamic time computation
-		glFinish();
-		float bezier_render_time = (glfwGetTime() - bezier_start_time) * 1000;
-
-		// Setup for Bezier rendering
-		dynamic_shader.Use();
-		vec3 dynamic_position = bezier_position + vec3(7.0f, 0.0f, 0.0f);
-
-		light_position = dynamic_position + light_offset;
-
-		t = (dynamic_position.z - min_max_distance[0]) / (min_max_distance[1] - min_max_distance[0]);
-		float current_tess_level_outer_dynamic = tess_levels_outer_dynamic[0] * t + tess_levels_outer_dynamic[1] * (1 - t);
-		float current_tess_level_inner_dynamic = tess_levels_inner_dynamic[0] * t + tess_levels_inner_dynamic[1] * (1 - t);
-
-		// Start dynamic time computation
-		float dynamic_start_time = glfwGetTime();
-
-		glUniformMatrix4fv(glGetUniformLocation(dynamic_shader.Program, "projection_matrix"), 1, GL_FALSE, value_ptr(projection));
-        glUniformMatrix4fv(glGetUniformLocation(dynamic_shader.Program, "view_matrix"), 1, GL_FALSE, value_ptr(view));
-		glUniform3fv(glGetUniformLocation(dynamic_shader.Program, "diffuse_color"), 1, diffuseColor_dynamic);
-        glUniform3fv(glGetUniformLocation(dynamic_shader.Program, "ambient_color"), 1, ambientColor);
-        glUniform3fv(glGetUniformLocation(dynamic_shader.Program, "specular_color"), 1, specularColor);
-		glUniform3fv(glGetUniformLocation(dynamic_shader.Program, "light_position"), 1, value_ptr(light_position));
-		glUniform1f(glGetUniformLocation(dynamic_shader.Program, "k_d"), Kd);
-		glUniform1f(glGetUniformLocation(dynamic_shader.Program, "k_s"), Ks);
-        glUniform1f(glGetUniformLocation(dynamic_shader.Program, "k_a"), Ka);
-        glUniform1f(glGetUniformLocation(dynamic_shader.Program, "shininess"), shininess);
-
-		glUniform1f(glGetUniformLocation(dynamic_shader.Program, "tess_level_outer"), current_tess_level_outer_dynamic);
-		glUniform1f(glGetUniformLocation(dynamic_shader.Program, "tess_level_inner"), current_tess_level_inner_dynamic);
-
-		dynamic_model_matrix = mat4(1.0f);
-		normal_matrix = mat3(1.0f);
-        dynamic_model_matrix = translate(dynamic_model_matrix, dynamic_position);
-		dynamic_model_matrix = rotate(dynamic_model_matrix, radians(rotation_angle), vec3(0, 1, 0));
-		normal_matrix = inverseTranspose(mat3(view * dynamic_model_matrix));
-        glUniformMatrix4fv(glGetUniformLocation(dynamic_shader.Program, "model_matrix"), 1, GL_FALSE, value_ptr(dynamic_model_matrix));
-		glUniformMatrix3fv(glGetUniformLocation(dynamic_shader.Program, "normal_matrix"), 1, GL_FALSE, value_ptr(normal_matrix));
-
-		teapot_lod0.Draw(true);
-
-		glFinish();
-		float dynamic_render_time = (glfwGetTime() - dynamic_start_time) * 1000;
-
-		// Update UI
-		frame_count++;
-		static_time_accumulator += static_render_time;
-		bezier_time_accumulator += bezier_render_time;
-		dynamic_time_accumulator += dynamic_render_time;
-        if (frame_count >= frame_limit) {
-            static_avg_render_time = (static_time_accumulator / frame_limit);
-			bezier_avg_render_time = (bezier_time_accumulator / frame_limit);
-			dynamic_avg_render_time = (dynamic_time_accumulator / frame_limit);
-
-            static_time_accumulator = 0;
-			bezier_time_accumulator = 0;
-			dynamic_time_accumulator = 0;
-            frame_count = 0;
-        }
-
-		int odd_tess_level_outer = round_to_odd(current_tess_level_outer);
-		int odd_tess_level_inner = round_to_odd(current_tess_level_inner);
-		int trigs_per_patch = 4 * (odd_tess_level_outer + odd_tess_level_inner - 2) + 2 * pow(odd_tess_level_inner - 2, 2);
-		int trigs_bezier = teapot_bezier.patches * trigs_per_patch;
-
-		int actual_tess_level_outer = ceil(current_tess_level_outer_dynamic);
-		int actual_tess_level_inner = ceil(current_tess_level_inner_dynamic);
-		if ((int) actual_tess_level_outer == 1) {
-			trigs_per_patch = 1;
-		} else {
-			if ((int) actual_tess_level_outer == 1) {
-				trigs_per_patch = 3 * (actual_tess_level_outer + actual_tess_level_inner - 2) + 1;
+			// Draw based on the LOD technique
+			if (tech == STATIC) {
+				int lod_level = round(tess_level_outer);
+				if (lod_level == 2) {
+        		    teapot_lod2.Draw();
+        		} else if (lod_level == 1) {
+        		    teapot_lod1.Draw();
+        		} else {
+        		    teapot_lod0.Draw();
+        		}
+			} else if (tech == DYNAMIC) {
+				teapot_lod0.Draw(true);
 			} else {
-				trigs_per_patch = 3 * (actual_tess_level_outer + actual_tess_level_inner - 2) + 3;
+				teapot_bezier.Draw();
 			}
-		}
-		int trigs_dynamic = 3488 * trigs_per_patch;
 
-		static_avg_times.push_back(static_avg_render_time);
-		bezier_avg_times.push_back(bezier_avg_render_time);
-		dynamic_avg_times.push_back(dynamic_avg_render_time);
-		lod_levels.push_back(lod_level);
-		bezier_trigs.push_back(trigs_bezier);
-		dynamic_trigs.push_back(trigs_dynamic);
-		if (int(static_avg_times.size()) > avg_times_max) {
-			static_avg_times.erase(static_avg_times.begin());
-			bezier_avg_times.erase(bezier_avg_times.begin());
-			dynamic_avg_times.erase(dynamic_avg_times.begin());
-			lod_levels.erase(lod_levels.begin());
-			bezier_trigs.erase(bezier_trigs.begin());
-			dynamic_trigs.erase(dynamic_trigs.begin());
+			// Stop static time computation
+			glEndQuery(GL_TIME_ELAPSED);
+
+			// Save the number of triangles used/generated
+			triangle_count[tech] = get_triangle_count(tech, tess_level_outer, tess_level_inner);
 		}
 
-		// Setup GUI frame
-        prepare_gui_frame(static_avg_times, bezier_avg_times, dynamic_avg_times, lod_levels, bezier_trigs, dynamic_trigs, avg_times_max);
+		// Gather the render times of each technique
+		for (int i = STATIC; i <= BEZIER; i++) {
+			poll_time_queries(time_queries_ids[i], time_accumulator[i], &time_accumulator_idx[i]);
+		}
 
-        // Render GUI on top
+		// Save the avg render times and triangle count and delete those more than {time_window} seconds away
+		timestamps.push_back(current_frame);
+		for (int i = STATIC; i <= BEZIER; i++) {
+			avg_times[i].push_back(average_time(time_accumulator[i]));
+			trigs[i].push_back(triangle_count[i]);
+		}
+		while (timestamps.size() > 0 && current_frame - timestamps[0] > time_window) {
+			for (int i = STATIC; i <= BEZIER; i++) {
+				avg_times[i].erase(avg_times[i].begin());
+				trigs[i].erase(trigs[i].begin());
+			}
+			timestamps.erase(timestamps.begin());	
+		}
+
+		// Prepare and render GUI frame
+        prepare_gui_frame(avg_times, trigs, display_lods_in_gui);
+
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
@@ -415,7 +337,9 @@ int main() {
     }
 
     ////////////////// CLEANUP //////////////////
-    static_shader.Delete();
+	for (int i = STATIC; i <= BEZIER; i++) {
+		shaders[i].Delete();
+	}
     
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
@@ -452,113 +376,27 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 	}
 }
 
-////////////////// GUI FUNCTIONS //////////////////
-
-void prepare_gui_frame(const vector<float> &static_avg_times, const vector<float> &bezier_avg_times, const vector<float> &dynamic_avg_times, const vector<int> &lod_levels, const vector<int> &bezier_trigs, const vector<int> &dynamic_trigs, int max_len) {
-    // Setup new GUI frame
-    ImGui_ImplOpenGL3_NewFrame();
-    ImGui_ImplGlfw_NewFrame();
-    ImGui::NewFrame();
-
-    // Define options for the GUI window
-    ImGuiWindowFlags window_flags = 0;
-    window_flags |= ImGuiWindowFlags_NoScrollbar;
-    window_flags |= ImGuiWindowFlags_NoMove;
-    window_flags |= ImGuiWindowFlags_NoResize;
-    window_flags |= ImGuiWindowFlags_NoCollapse;
-
-	// Find LOD changes
-	vector<int> lod_changes;
-	// lod_changes.push_back(0);
-
-	for (int i = 1; i < int(lod_levels.size()) - 1; i++) {
-		if (lod_levels[i] != lod_levels[i+1]) {
-			lod_changes.push_back(i+1);
-		}
-	}
-
-	// Compute triangle counts
-	vector<int> static_triangle_counts;
-	for (int i = 0; i < int(lod_levels.size()); i++) {
-		int trigs = (lod_levels[i] == 0)? 5144 : ((lod_levels[i] == 1))? 22885 : 158865;
-		static_triangle_counts.push_back(trigs);
-	}
-
-    // Init window
-    ImGui::Begin("Performance Analysis", NULL, window_flags);
-
-	if (ImPlot::BeginPlot("Frame Times")) {
-		// ImPlot::SetupAxes("##", "##", 0, ImPlotAxisFlags_AutoFit);
-		ImPlot::SetupAxisLimits(ImAxis_X1, 0, max_len-1, ImPlotCond_Always);
-		ImPlot::SetupAxisFormat(ImAxis_X1, "");
-		ImPlot::SetupAxisLimits(ImAxis_Y1, 0.0f, 1.5f);
-		ImPlot::SetupAxisLimitsConstraints(ImAxis_Y1, 0.0, INFINITY);
-		ImPlot::SetupAxisFormat(ImAxis_Y1, "%.2f");
-
-		// Setup legend
-		ImPlotLegendFlags legend_flags = ImPlotLegendFlags_Horizontal;
-		ImPlot::SetupLegend(ImPlotLocation_NorthWest, legend_flags);
-
-		ImVec4 static_color;
-		ImPlotSpec specs;
-		specs.FillAlpha = 0.25f;
-		specs.Flags = ImPlotLineFlags_Shaded;
-
-		if (int(static_avg_times.size()) > 0) {
-			ImPlot::PlotLine("Static", &static_avg_times[0], int(static_avg_times.size()), 1.0, 0.0, specs);
-			static_color = ImPlot::GetLastItemColor();
-			ImPlot::PlotLine("Bezier", &bezier_avg_times[0], int(bezier_avg_times.size()), 1.0, 0.0, specs);
-			ImPlot::PlotLine("Dynamic", &dynamic_avg_times[0], int(dynamic_avg_times.size()), 1.0, 0.0, specs);
-		}
-
-		// Display LOD lines
-		if (int(lod_levels.size()) > 0 && display_lods_in_gui) {
-			specs.LineColor = static_color;
-			ImPlot::PlotInfLines("##LOD Changes", &lod_changes[0], int(lod_changes.size()), specs);
-
-			for (int i = 0; i < int(lod_changes.size()); i++) {
-				string text = "LOD " + std::to_string(lod_levels[lod_changes[i]]);
-				ImPlot::PlotText(text.c_str(), lod_changes[i], 0.0f, ImVec2(25, -15));
-			}
-		}
-
-		ImPlot::EndPlot();
-	}
-
-	if (ImPlot::BeginPlot("Triangle count")) {
-		ImPlot::SetupAxesLimits(0,max_len-1,0,190000, ImPlotCond_Always);
-		ImPlot::SetupAxisFormat(ImAxis_X1, "");
-		ImPlot::SetupAxisFormat(ImAxis_Y1, k_formatter);
-
-		ImPlotLegendFlags legend_flags = ImPlotLegendFlags_Horizontal;
-		ImPlot::SetupLegend(ImPlotLocation_NorthWest, legend_flags);
-
-		ImPlotSpec specs;
-		specs.FillAlpha = 0.25f;
-		specs.Flags = ImPlotStairsFlags_Shaded;
-
-		ImPlot::PlotStairs("Static", &static_triangle_counts[0], int(static_triangle_counts.size()), 1.0, 0.0, specs);
-
-		specs.Flags = ImPlotLineFlags_Shaded;
-		ImPlot::PlotLine("Bezier", &bezier_trigs[0], int(bezier_trigs.size()), 1.0, 0.0, specs);
-		ImPlot::PlotLine("Dynamic", &dynamic_trigs[0], int(dynamic_trigs.size()), 1.0, 0.0, specs);
-
-		ImPlot::EndPlot();
-	}
-
-    ImGui::End();
-
-    return;
-}
-
-int k_formatter(double value, char* buff, int size, void* data) {
-    if (fabs(value) >= 1000) {  
-        return snprintf(buff, size, "%.0fk", value / 1000.0);  
-    }  
-    return snprintf(buff, size, "%.0f", value); 
-}
-
 ////////////////// HELPER FUNCTIONS //////////////////
+
+int get_triangle_count(int tech, float tess_level_outer, float tess_level_inner) {
+	if (tech == STATIC) {
+		int lod_level = round(tess_level_outer);
+		return (lod_level == 0)? 3488 : (lod_level == 1)? 19480 : 145620;
+	} else if (tech == DYNAMIC) {
+		int actual_tess_level_outer = ceil(tess_level_outer);
+		int actual_tess_level_inner = ceil(tess_level_inner);
+		int trigs_per_patch = 1;
+		if (actual_tess_level_outer != 1) {
+			trigs_per_patch = 3 * (actual_tess_level_outer - 1) + 1;
+		}
+		return 3488 * trigs_per_patch;
+	} else {
+		int actual_tess_level_outer = round_to_odd(tess_level_outer);
+		int actual_tess_level_inner = round_to_odd(tess_level_inner);
+		int trigs_per_patch = 4 * (actual_tess_level_outer + actual_tess_level_inner - 2) + 2 * pow(actual_tess_level_inner - 2, 2);
+		return 28 * trigs_per_patch;
+	}
+}
 
 bool file_exists(const string& path) {
     ifstream f(path);
@@ -572,18 +410,24 @@ int round_to_odd(float t) {
 	return (res % 2 == 0)? res + 1 : res;
 }
 
-int trigs_inner_triangle(int current) {
-	if (current < 0) {
-		return 0;
-	} else if (current <= 1) {
-		return current;
+float average_time(vector<float> vec) {
+	float res = 0.0f;
+	for (int i = 0; i < vec.size() && vec[i] >= 0.0f; i++) {
+		res += vec[i];
 	}
+	return res / vec.size();
+}
 
-	return 3 * (2 * current - 2) + trigs_inner_triangle(current - 2);
+void poll_time_queries(GLuint query_id, vector<float> &accumulator, int *index) {
+	GLuint64 result;
+	glGetQueryObjectui64v(query_id, GL_QUERY_RESULT, &result);
+	glDeleteQueries(1, &query_id);
+
+	accumulator[*index] = (float) result / 1000000;
+	*index = (*index + 1) % accumulator.size();
 }
 
 void convert_norm_to_obj(const string& obj_path) {
-    
     // Open files
     string norm_path = obj_path.substr(0, obj_path.length() - 4) + ".norm";
     
