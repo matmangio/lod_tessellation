@@ -1,3 +1,5 @@
+#pragma once
+
 #include <vector>
 #include <imgui/imgui.h>
 #include <imgui/imgui_impl_glfw.h>
@@ -8,8 +10,6 @@
 #define STATIC 0
 #define DYNAMIC 1
 #define BEZIER 2
-
-using namespace std;
 
 int k_formatter(double value, char* buff, int size, void* data) {
     if (fabs(value) >= 1000) {  

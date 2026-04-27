@@ -1,6 +1,7 @@
 #include <iostream>
 #include <fstream>
 #include <string>
+#include <math.h>
 
 #include <glad/glad.h>
 #include <glfw/glfw3.h>
@@ -32,13 +33,16 @@ using namespace glm;
 
 ////////////////// CONSTANTS //////////////////
 // Window parameters
-const int screen_dimensions[2] = {1920, 1080};
-const int window_position[2] = {0, 0};
+const GLuint screen_dimensions[2] = {1920, 900};
+const GLuint window_position[2] = {0, 40};
 const vec3 clear_color = {0.6, 0.6, 0.6};
 
 // Movement parameters
 const float movement_speed = 4.0f;
 const float rotation_speed = 30.0f;
+const float min_max_distance[2] = {-8.0f, -50.0f};
+const vec3 position_offset = vec3{7.0f, 0.0f, 0.0f};	// The offset between different teapots
+const vec3 light_offset = vec3(0.0f, 4.0f, 4.0f);		// The offset of the light source from each teapot
 
 // Lighting parameters
 const GLfloat diffuse_color[3][3] = {
@@ -64,7 +68,10 @@ const GLfloat tess_extremes_inner[3][2] = {
 	{1.0f, 1.0f},	// DYNAMIC
 	{3.0f, 32.0f}	// BEZIER
 };
-const GLfloat min_max_distance[2] = {-8.0f, -50.0f};
+
+// Data parameters
+const int frame_window = 20;							// The number of frames over witch render times are averaged
+const float time_window = 15.0f;						// The time window (in seconds) over which the GUI shows the aggregated data
 
 ////////////////// FLAGS //////////////////
 bool wireframe = true;
@@ -75,12 +82,12 @@ bool display_lods_in_gui = false;
 ////////////////// SIGNATURES //////////////////
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mode);
 
-float average_time(vector<float> vec);
-void poll_time_queries(GLuint query_id, vector<float> &accumulator, int *index);
+float average_time(float vec[]);
+void poll_time_queries(GLuint query_id, float accumulator[], int *index);
 
+int round_to_odd(float t);
 int get_triangle_count(int tech, float tess_level_outer, float tess_level_inner);
 bool file_exists(const string& path);
-int round_to_odd(float t);
 void convert_norm_to_obj(const string& norm_path);
 
 ////////////////// MAIN FUNCTION //////////////////
@@ -174,39 +181,30 @@ int main() {
 
     ////////////////// TRANSFORMS //////////////////
     // Projection and view matrices
-	vec3 eye_world_position = vec3(0.0f, 0.0f, 7.0f);
-    mat4 projection = perspective(45.0f, (float) screen_width / (float) screen_height, 0.1f, 10000.0f);
-    mat4 view = lookAt(eye_world_position, vec3(0.0f, 0.0f, -1.0f), vec3(0.0f, 1.0f, 0.0f));
+    mat4 projection = perspective(45.0f, (float) screen_width / screen_height, 0.1f, 10000.0f);
+    mat4 view = lookAt(vec3(0.0f, 0.0f, 7.0f), vec3(0.0f, 0.0f, -1.0f), vec3(0.0f, 1.0f, 0.0f));
 
     // Model and normal matrices
 	mat4 model_matrix = mat4(1.0f);
 	mat3 normal_matrix = mat3(1.0f);
 
-    ////////////////// RENDERING LOOP //////////////////
-    float delta_time, current_frame = 0, last_frame = 0;
-
-	int frame_limit = 20;
-	int time_accumulator_idx[3] {0};
-    vector<float> time_accumulator[3];
-	int triangle_count[3];
-	for (int i = 0; i < frame_limit; i++) {
-		for (int i = STATIC; i <= BEZIER; i++) {
-			time_accumulator[i].push_back(-1.0f);
-		}
-	}
-
-	float time_window = 15.0f;
-	vector<float> avg_times[3];
-	vector<int> trigs[3];
-	vector<float> timestamps;
-
+	// Movement variables
     vec3 position = vec3(-7.0f, -1.0f, min_max_distance[0]);
-	vec3 position_offset = vec3{7.0f, 0.0f, 0.0f};
+	vec3 light_position = position + light_offset;
     vec3 direction = vec3(0.0f, 0.0f, -1.0f);
 	float rotation_angle = 0.0f;
 
-	vec3 light_offset = vec3(0.0f, 4.0f, 4.0f);
-	vec3 light_position = position + light_offset;
+    ////////////////// RENDERING LOOP //////////////////
+	// Time variables
+    float delta_time, current_frame = 0, last_frame = 0;
+
+	// Data collection variables
+	vector<float> timestamps;							// Timestamps of the collected data (equal across all techniques)
+	vector<float> avg_times[3];							// Render times for each technique averaged over {frame_window} frames
+	vector<int> trigs[3];								// Triangle counts for each technique
+	
+	float time_accumulator[3][frame_window] {-1};		// Circular arrays to store the last {frame_window} render times
+	int time_accumulator_idx[3] {0};					// Indices for the circular arrays
 
     while (!glfwWindowShouldClose(window)) {
         // Compute delta time
@@ -223,8 +221,6 @@ int main() {
         // Update position and rotation according to the respective flags
 		if (movement) {
 			position += (movement_speed * delta_time) * direction;
-
-			// Change direction at the extremities
 			if (position.z >= min_max_distance[0]) {
 				direction = {0.0f, 0.0f, -1.0f};
 			} else if (position.z <= min_max_distance[1]) {
@@ -232,10 +228,7 @@ int main() {
 			}
 		}
 		if (rotation) {
-			rotation_angle += (rotation_speed * delta_time);
-			while (rotation_angle >= 360.0f) {
-				rotation_angle -= 360.0f;
-			}
+			rotation_angle = fmod(rotation_angle + rotation_speed * delta_time, 360.0f);
 		}
 
 		// Generate queries for time computations
@@ -300,28 +293,26 @@ int main() {
 				teapot_bezier.Draw();
 			}
 
-			// Stop static time computation
+			// Stop time computation
 			glEndQuery(GL_TIME_ELAPSED);
 
 			// Save the number of triangles used/generated
-			triangle_count[tech] = get_triangle_count(tech, tess_level_outer, tess_level_inner);
+			int triangle_count = get_triangle_count(tech, tess_level_outer, tess_level_inner);
+			trigs[tech].push_back(triangle_count);
 		}
 
-		// Gather the render times of each technique
-		for (int i = STATIC; i <= BEZIER; i++) {
-			poll_time_queries(time_queries_ids[i], time_accumulator[i], &time_accumulator_idx[i]);
+		// Gather the render times of each technique (here to allow the GPU to asynchronously generate that data)
+		for (int tech = STATIC; tech <= BEZIER; tech++) {
+			poll_time_queries(time_queries_ids[tech], time_accumulator[tech], &time_accumulator_idx[tech]);
+			avg_times[tech].push_back(average_time(time_accumulator[tech]));
 		}
 
-		// Save the avg render times and triangle count and delete those more than {time_window} seconds away
+		// Delete the data more than {time_window} seconds away
 		timestamps.push_back(current_frame);
-		for (int i = STATIC; i <= BEZIER; i++) {
-			avg_times[i].push_back(average_time(time_accumulator[i]));
-			trigs[i].push_back(triangle_count[i]);
-		}
 		while (timestamps.size() > 0 && current_frame - timestamps[0] > time_window) {
-			for (int i = STATIC; i <= BEZIER; i++) {
-				avg_times[i].erase(avg_times[i].begin());
-				trigs[i].erase(trigs[i].begin());
+			for (int tech = STATIC; tech <= BEZIER; tech++) {
+				avg_times[tech].erase(avg_times[tech].begin());
+				trigs[tech].erase(trigs[tech].begin());
 			}
 			timestamps.erase(timestamps.begin());	
 		}
@@ -337,8 +328,8 @@ int main() {
     }
 
     ////////////////// CLEANUP //////////////////
-	for (int i = STATIC; i <= BEZIER; i++) {
-		shaders[i].Delete();
+	for (int tech = STATIC; tech <= BEZIER; tech++) {
+		shaders[tech].Delete();
 	}
     
     ImGui_ImplOpenGL3_Shutdown();
@@ -351,8 +342,8 @@ int main() {
     return 0;
 }
 
+////////////////// KEYBOARD CALLBACKS //////////////////
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mode) {
-    
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
         // ESC: exit window
         glfwSetWindowShouldClose(window, true);
@@ -378,6 +369,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 
 ////////////////// HELPER FUNCTIONS //////////////////
 
+// Compute the proper triangle count given a technique index and a tessellation level
 int get_triangle_count(int tech, float tess_level_outer, float tess_level_inner) {
 	if (tech == STATIC) {
 		int lod_level = round(tess_level_outer);
@@ -398,11 +390,13 @@ int get_triangle_count(int tech, float tess_level_outer, float tess_level_inner)
 	}
 }
 
+// Returns true if a certain file exists, false otherwise
 bool file_exists(const string& path) {
     ifstream f(path);
     return f.good();
 }
 
+// Rounds the number to the next nearest odd
 int round_to_odd(float t) {
 	if (t < 0) t = 0.0f;
 
@@ -410,23 +404,26 @@ int round_to_odd(float t) {
 	return (res % 2 == 0)? res + 1 : res;
 }
 
-float average_time(vector<float> vec) {
+// Computes the average of the passed render times over {frame_window} frames
+float average_time(float vec[]) {
 	float res = 0.0f;
-	for (int i = 0; i < vec.size() && vec[i] >= 0.0f; i++) {
+	for (int i = 0; i < frame_window && vec[i] >= 0.0f; i++) {
 		res += vec[i];
 	}
-	return res / vec.size();
+	return res / frame_window;
 }
 
-void poll_time_queries(GLuint query_id, vector<float> &accumulator, int *index) {
+// Gets the result of the render time query and stores it in the {accumulator} circular array
+void poll_time_queries(GLuint query_id, float accumulator[], int *index) {
 	GLuint64 result;
 	glGetQueryObjectui64v(query_id, GL_QUERY_RESULT, &result);
 	glDeleteQueries(1, &query_id);
 
 	accumulator[*index] = (float) result / 1000000;
-	*index = (*index + 1) % accumulator.size();
+	*index = (*index + 1) % frame_window;
 }
 
+// Converts the .norm file format to the desired .obj file given in the {obj_path} parameter
 void convert_norm_to_obj(const string& obj_path) {
     // Open files
     string norm_path = obj_path.substr(0, obj_path.length() - 4) + ".norm";
