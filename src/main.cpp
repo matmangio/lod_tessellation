@@ -68,6 +68,7 @@ const GLfloat tess_extremes_inner[3][2] = {
 	{1.0f, 1.0f},	// DYNAMIC
 	{3.0f, 32.0f}	// BEZIER
 };
+const GLfloat dynamic_displacement = 0.025;
 
 // Data parameters
 const int frame_window = 20;							// The number of frames over witch render times are averaged
@@ -239,7 +240,7 @@ int main() {
 		for (int tech = STATIC; tech <= BEZIER; tech++) {
 			// Update model and light positions
 			vec3 model_position = position + position_offset * (float) tech;
-			light_position = position + light_offset;
+			light_position = model_position + light_offset;
 
 			// Select LOD/tessellation level
 			float t = (position.z - min_max_distance[0]) / (min_max_distance[1] - min_max_distance[0]);
@@ -266,6 +267,7 @@ int main() {
 
 			glUniform1f(glGetUniformLocation(shaders[tech].Program, "tess_level_outer"), tess_level_outer);
 			glUniform1f(glGetUniformLocation(shaders[tech].Program, "tess_level_inner"), tess_level_inner);
+			glUniform1f(glGetUniformLocation(shaders[tech].Program, "dynamic_displacement"), dynamic_displacement);
 
 			// Compute and send the model and normal matrices
         	model_matrix = mat4(1.0f);
