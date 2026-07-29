@@ -71,7 +71,7 @@ const GLfloat tess_extremes_inner[3][2] = {
 const GLfloat dynamic_displacement = 0.025;
 
 // Data parameters
-const int frame_window = 20;							// The number of frames over witch render times are averaged
+const int frame_window = 20;							// The number of frames over which render times are averaged
 const float time_window = 15.0f;						// The time window (in seconds) over which the GUI shows the aggregated data
 
 ////////////////// FLAGS //////////////////
