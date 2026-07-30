@@ -19,6 +19,7 @@
 #include <utils/shader.h>
 #include <utils/bezier.h>
 #include <utils/gui.h>
+#include <utils/camera.h>
 
 using namespace std;
 using namespace glm;
@@ -33,9 +34,21 @@ using namespace glm;
 
 ////////////////// CONSTANTS //////////////////
 // Window parameters
-const GLuint screen_dimensions[2] = {1920, 900};
+const GLuint screen_dimensions[2] = {1820, 980};
 const GLuint window_position[2] = {0, 40};
 const vec3 clear_color = {0.6, 0.6, 0.6};
+
+// Input handling
+bool keys[1024];										// An array of booleans for each key on the keyboard
+
+// Camera parameters
+Camera camera(vec3(0.0f, 0.0f, 7.0f), false);
+const float camera_speed = 5.0f;
+const float mouse_sensitivity = 0.15f;
+
+float first_mouse = true;								// True when the mouse was disabled last frame (or on the first frame)
+double last_mouse_x = 0.0;								// The last registered mouse position on the x axis
+double last_mouse_y = 0.0;								// The last registered mouse position on the y axis
 
 // Movement parameters
 const float movement_speed = 4.0f;
@@ -79,9 +92,12 @@ bool wireframe = true;
 bool movement = true;
 bool rotation = true;
 bool display_lods_in_gui = false;
+bool display_mouse = false;
 
 ////////////////// SIGNATURES //////////////////
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mode);
+void mouse_callback(GLFWwindow* window, double xpos, double ypos);
+void apply_camera_movements(float delta_time);
 
 float average_time(float vec[]);
 void poll_time_queries(GLuint query_id, float accumulator[], int *index);
@@ -116,8 +132,14 @@ int main() {
 	// Move window to specified coordinates
 	glfwSetWindowPos(window, window_position[0], window_position[1]);
 
-    // Link keyboard callback
+    // Link i/o callbacks
     glfwSetKeyCallback(window, key_callback);
+	glfwSetCursorPosCallback(window, mouse_callback);
+
+	// Disable the mouse cursor if needed
+	if (!display_mouse) {
+		glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+	}
 
     // Load the GLFW context in GLAD
     if (!gladLoadGLLoader((GLADloadproc) glfwGetProcAddress)) {
@@ -180,10 +202,15 @@ int main() {
 	Shader bezier_shader("shaders/bezier.vert", "shaders/illumination.frag", "shaders/bezier.tcs", "shaders/bezier.tes");
 	Shader shaders[3] = {static_shader, dynamic_shader, bezier_shader};
 
+	////////////////// CAMERA //////////////////
+	// Init camera parameters
+	camera.MovementSpeed = camera_speed;
+	camera.MouseSensitivity = mouse_sensitivity;
+
     ////////////////// TRANSFORMS //////////////////
-    // Projection and view matrices
+	// Projection and view matrices
+	mat4 view = camera.GetViewMatrix();
     mat4 projection = perspective(45.0f, (float) screen_width / screen_height, 0.1f, 10000.0f);
-    mat4 view = lookAt(vec3(0.0f, 0.0f, 7.0f), vec3(0.0f, 0.0f, -1.0f), vec3(0.0f, 1.0f, 0.0f));
 
     // Model and normal matrices
 	mat4 model_matrix = mat4(1.0f);
@@ -215,6 +242,10 @@ int main() {
 
         // Check for I/O events
         glfwPollEvents();
+
+		// Move camera according to events and update view matrix accordingly
+		apply_camera_movements(delta_time);
+		view = camera.GetViewMatrix();
 
         // Clear the color and depth buffers
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -321,7 +352,6 @@ int main() {
 
 		// Prepare and render GUI frame
         prepare_gui_frame(avg_times, trigs, display_lods_in_gui);
-
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
@@ -344,13 +374,15 @@ int main() {
     return 0;
 }
 
-////////////////// KEYBOARD CALLBACKS //////////////////
+////////////////// I/O HANDLING //////////////////
+
+// Callback for keyboard events
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mode) {
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
         // ESC: exit window
         glfwSetWindowShouldClose(window, true);
-    } else if (key == GLFW_KEY_W && action == GLFW_PRESS) {
-        // W: wireframe on/off
+    } else if (key == GLFW_KEY_P && action == GLFW_PRESS) {
+        // P: wireframe on/off
         wireframe = !wireframe;
         if (wireframe) {
             glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
@@ -366,7 +398,78 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 	} else if (key == GLFW_KEY_L && action == GLFW_PRESS) {
 		// L: lods on/off
 		display_lods_in_gui = !display_lods_in_gui;
+	} else if (key == GLFW_KEY_TAB && action == GLFW_PRESS) {
+		// TAB: mouse on/off
+		display_mouse = !display_mouse;
+		if (display_mouse) {
+			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+			first_mouse = true;
+		} else {
+			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+		}
 	}
+
+	// Save each key's pressed status
+	if (action == GLFW_PRESS) {
+		keys[key] = true;
+	} else if (action == GLFW_RELEASE) {
+		keys[key] = false;
+	}
+}
+
+// Callback for mouse events
+void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
+	// If the mouse is enabled, don't move the camera
+	if (display_mouse) {
+		return;
+	}
+	
+	// On the first frame we don't have a "last" position, so we initialize the corresponding variables with the current position
+    if (first_mouse) {
+        last_mouse_x = xpos;
+        last_mouse_y = ypos;
+        first_mouse = false;
+    }
+
+    // Compute the offset of mouse position
+    GLfloat xoffset = xpos - last_mouse_x;
+    GLfloat yoffset = last_mouse_y - ypos;
+
+    // Update the last position
+    last_mouse_x = xpos;
+    last_mouse_y = ypos;
+
+    // Update the camera position based on the computed offsets
+    camera.ProcessMouseMovement(xoffset, yoffset);
+
+}
+
+// Move the camera according to WASD input
+void apply_camera_movements(float delta_time) {
+    // Compute the movement bitmap
+	int movement_bitmap = 0;
+    
+    if (keys[GLFW_KEY_W]) {
+		movement_bitmap |= Camera_Movement::FORWARD;
+	}
+	if (keys[GLFW_KEY_S]) {
+		movement_bitmap |= Camera_Movement::BACKWARD;
+	}
+	if (keys[GLFW_KEY_D]) {
+		movement_bitmap |= Camera_Movement::RIGHT;
+	}
+	if (keys[GLFW_KEY_A]) {
+		movement_bitmap |= Camera_Movement::LEFT;
+	}
+	if (keys[GLFW_KEY_E]) {
+		movement_bitmap |= Camera_Movement::UP;
+	}
+	if (keys[GLFW_KEY_Q]) {
+		movement_bitmap |= Camera_Movement::DOWN;
+	}
+
+	// Apply the final movement
+	camera.ProcessKeyboard(movement_bitmap, delta_time);
 }
 
 ////////////////// HELPER FUNCTIONS //////////////////

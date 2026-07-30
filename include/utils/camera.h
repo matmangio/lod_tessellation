@@ -17,13 +17,16 @@ Universita' degli Studi di Milano
 // we use GLM to create the view matrix and to manage camera transformations
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glad/glad.h>
 
 // possible camera movements
 enum Camera_Movement {
-    FORWARD,
-    BACKWARD,
-    LEFT,
-    RIGHT
+    FORWARD 	= 0b00000001,
+    BACKWARD 	= 0b00000010,
+    LEFT 		= 0b00000100,
+    RIGHT 		= 0b00001000,
+	UP			= 0b00010000,
+	DOWN		= 0b00100000
 };
 
 // Default camera settings
@@ -39,8 +42,7 @@ const GLfloat DIAGONAL_COMPENSATION = 0.70710678f;
 const GLfloat SENSITIVITY =  0.25f;
 
 ///////////////////  CAMERA class ///////////////////////
-class Camera
-{
+class Camera {
 public:
     // Camera Attributes
     glm::vec3 Position;
@@ -89,23 +91,37 @@ public:
     }
 
     //////////////////////////////////////////
-    // it updates camera position when a WASD key is pressed
-    void ProcessKeyboard(Camera_Movement direction, GLfloat deltaTime)
-    {        
-        // the velocity is weighted by a compensation factor
-        // = 1 if a single WASD is pressed
-        // = 1/sqrt(2) if two keys are pressed for a diagonal movement
-        GLfloat velocity = this->MovementSpeed * deltaTime * this->MovementCompensation;
+    // Updates camera position when a combination of the WASD keys is pressed; the bitmap represents the sum of directions pressed and referes to the Camera_Movement enum
+    void ProcessKeyboard(int bitmap, GLfloat deltaTime) {        
+		// Final direction of the movement
+		glm::vec3 direction = glm::vec3(0, 0, 0);
 
-        if (direction == FORWARD)
-            this->Position += (this->onGround ? this->WorldFront : this->Front) * velocity;
-        if (direction == BACKWARD)
-            this->Position -= (this->onGround ? this->WorldFront : this->Front) * velocity;
-        if (direction == LEFT)
-            this->Position -= this->Right * velocity;
-        if (direction == RIGHT)
-            this->Position += this->Right * velocity;
-        
+        if (bitmap & Camera_Movement::FORWARD) {
+			direction += (this->onGround)? this->WorldFront : this->Front;
+		}
+        if (bitmap & Camera_Movement::BACKWARD) {
+            direction -= (this->onGround)? this->WorldFront : this->Front;
+		}
+        if (bitmap & Camera_Movement::RIGHT) {
+            direction += this->Right;
+		}
+		if (bitmap & Camera_Movement::LEFT) {
+            direction -= this->Right;
+		}
+		if (bitmap & Camera_Movement::UP) {
+			direction += this->Up;
+		}
+        if (bitmap & Camera_Movement::DOWN) {
+			direction -= this->Up;
+		}
+		
+		// Normalize the total direction vector
+		if (direction.length() != 0) {
+			direction = direction / (float) direction.length();
+		}
+
+		// Apply movement
+		this->Position += direction * (this->MovementSpeed * deltaTime);
     }
 
     //////////////////////////////////////////
