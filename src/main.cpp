@@ -43,7 +43,7 @@ bool keys[1024];										// An array of booleans for each key on the keyboard
 
 // Camera parameters
 Camera camera(vec3(0.0f, 0.0f, 7.0f), false);
-const float camera_speed = 5.0f;
+const float camera_speed = 10.0f;
 const float mouse_sensitivity = 0.15f;
 
 float first_mouse = true;								// True when the mouse was disabled last frame (or on the first frame)
@@ -53,7 +53,6 @@ double last_mouse_y = 0.0;								// The last registered mouse position on the y
 // Movement parameters
 const float movement_speed = 4.0f;
 const float rotation_speed = 30.0f;
-const float min_max_distance[2] = {-8.0f, -50.0f};
 const vec3 position_offset = vec3{7.0f, 0.0f, 0.0f};	// The offset between different teapots
 const vec3 light_offset = vec3(0.0f, 4.0f, 4.0f);		// The offset of the light source from each teapot
 
@@ -71,6 +70,11 @@ const GLfloat Ka = 0.2f;
 const GLfloat shininess = 25.0f;
 
 // LOD and Tessellation parameters (min - max)
+const GLfloat static_boundaries[2] = {22.0f, 36.0f};
+const GLfloat static_buffer_dist = 1.0f;				// Subtracted from the static boundary when moving backwards from a higher to a lower LOD
+int last_static_lod = -1;
+
+const float min_max_distance[2] = {8.0f, 50.0f};
 const GLfloat tess_extremes_outer[3][2] = {
 	{0.0f, 2.0f},	// STATIC
 	{0.1f, 4.9f},	// DYNAMIC
@@ -89,8 +93,8 @@ const float time_window = 15.0f;						// The time window (in seconds) over which
 
 ////////////////// FLAGS //////////////////
 bool wireframe = true;
-bool movement = true;
-bool rotation = true;
+bool movement = false;
+bool rotation = false;
 bool display_lods_in_gui = false;
 bool display_mouse = false;
 
@@ -217,7 +221,7 @@ int main() {
 	mat3 normal_matrix = mat3(1.0f);
 
 	// Movement variables
-    vec3 position = vec3(-7.0f, -1.0f, min_max_distance[0]);
+    vec3 position = vec3(-7.0f, -1.0f, -min_max_distance[0]);
 	vec3 light_position = position + light_offset;
     vec3 direction = vec3(0.0f, 0.0f, -1.0f);
 	float rotation_angle = 0.0f;
@@ -273,8 +277,19 @@ int main() {
 			vec3 model_position = position + position_offset * (float) tech;
 			light_position = model_position + light_offset;
 
-			// Select LOD/tessellation level
-			float t = (position.z - min_max_distance[0]) / (min_max_distance[1] - min_max_distance[0]);
+			// Select LOD/tesselation level based on distance from camera
+			float distance_to_camera = distance(model_position, camera.Position);
+			
+			int static_lod;
+			for (static_lod = 0; static_lod < 2; static_lod++) {
+				float boundary = (static_lod == last_static_lod - 1)? static_boundaries[static_lod] - static_buffer_dist : static_boundaries[static_lod];
+				if (distance_to_camera < boundary) {
+					break;
+				}
+			}
+			last_static_lod = static_lod;
+
+			float t = glm::clamp((distance_to_camera - min_max_distance[0]) / (min_max_distance[1] - min_max_distance[0]), 0.0f, 1.0f);
 			float tess_level_outer = tess_extremes_outer[tech][0] * t + tess_extremes_outer[tech][1] * (1 - t);
 			float tess_level_inner = tess_extremes_inner[tech][0] * t + tess_extremes_inner[tech][1] * (1 - t);
 
@@ -312,16 +327,15 @@ int main() {
 
 			// Draw based on the LOD technique
 			if (tech == STATIC) {
-				int lod_level = round(tess_level_outer);
-				if (lod_level == 2) {
-        		    teapot_lod2.Draw();
-        		} else if (lod_level == 1) {
+				if (static_lod == 0) {
+        		    teapot_lod0.Draw();
+        		} else if (static_lod == 1) {
         		    teapot_lod1.Draw();
         		} else {
-        		    teapot_lod0.Draw();
+        		    teapot_lod2.Draw();
         		}
 			} else if (tech == DYNAMIC) {
-				teapot_lod0.Draw(true);
+				teapot_lod2.Draw(true);
 			} else {
 				teapot_bezier.Draw();
 			}
