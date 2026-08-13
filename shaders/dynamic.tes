@@ -3,7 +3,6 @@
 layout (triangles, equal_spacing) in;
 
 uniform mat4 projection_matrix;
-uniform float dynamic_displacement;
 
 in vec3 L_es[];
 in vec3 V_es[];
@@ -24,7 +23,7 @@ void main() {
 	N = normalize(interpolate(N_es[0], N_es[1], N_es[2]));
 
 	vec3 mv_position = interpolate(gl_in[0].gl_Position.xyz, gl_in[1].gl_Position.xyz, gl_in[2].gl_Position.xyz);
-	mv_position += dynamic_displacement * N;
 
+	// Finish transformations using the projection matrix
 	gl_Position = projection_matrix * vec4(mv_position, 1.0);
 }

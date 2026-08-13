@@ -1,15 +1,12 @@
 #pragma once
 
 #include <vector>
+#include <utils/dlodObject.h>
 #include <imgui/imgui.h>
 #include <imgui/imgui_impl_glfw.h>
 #include <imgui/imgui_impl_opengl3.h>
 #include <imgui/implot.h>
 #include <imgui/implot_internal.h>
-
-#define STATIC 0
-#define DYNAMIC 1
-#define BEZIER 2
 
 int k_formatter(double value, char* buff, int size, void* data) {
     if (fabs(value) >= 1000) {  
@@ -18,7 +15,7 @@ int k_formatter(double value, char* buff, int size, void* data) {
     return snprintf(buff, size, "%.0f", value); 
 }
 
-void prepare_gui_frame(const vector<float> avg_times[], const vector<int> trigs[], bool display_lods) {
+void prepare_gui_frame(const vector<float> avg_times[], const vector<int> trigs[]) {
     // Setup new GUI frame
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
@@ -64,12 +61,6 @@ void prepare_gui_frame(const vector<float> avg_times[], const vector<int> trigs[
 			static_color = ImPlot::GetLastItemColor();
 			ImPlot::PlotLine("Dynamic", &avg_times[DYNAMIC][0], int(avg_times[DYNAMIC].size()), 1.0, 0.0, specs);
 			ImPlot::PlotLine("Bezier", &avg_times[BEZIER][0], int(avg_times[BEZIER].size()), 1.0, 0.0, specs);
-		}
-
-		// Display LOD lines
-		if (int(trigs[STATIC].size()) > 0 && display_lods) {
-			specs.LineColor = static_color;
-			ImPlot::PlotInfLines("##LOD Changes", &lod_changes[0], int(lod_changes.size()), specs);
 		}
 
 		ImPlot::EndPlot();

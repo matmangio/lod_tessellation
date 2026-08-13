@@ -20,17 +20,13 @@
 #include <utils/bezier.h>
 #include <utils/gui.h>
 #include <utils/camera.h>
+#include <utils/dlodObject.h>
 
 using namespace std;
 using namespace glm;
 
 // Disable Imgui demo windows to save compile time
 #define IMGUI_DISABLE_DEMO_WINDOWS
-
-// Define indices for different LOD types
-#define STATIC 0
-#define DYNAMIC 1
-#define BEZIER 2
 
 ////////////////// CONSTANTS //////////////////
 // Window parameters
@@ -71,21 +67,20 @@ const GLfloat shininess = 25.0f;
 
 // LOD and Tessellation parameters (min - max)
 const GLfloat static_boundaries[2] = {22.0f, 36.0f};
-const GLfloat static_buffer_dist = 1.0f;				// Subtracted from the static boundary when moving backwards from a higher to a lower LOD
+const GLfloat static_buffer_dist = 3.0f;				// Subtracted from the static boundary when moving backwards from a higher to a lower LOD
 int last_static_lod = -1;
 
 const float min_max_distance[2] = {8.0f, 50.0f};
 const GLfloat tess_extremes_outer[3][2] = {
 	{0.0f, 2.0f},	// STATIC
-	{0.1f, 4.9f},	// DYNAMIC
+	{0.1f, 16.0f},	// DYNAMIC
 	{3.0f, 64.0f}	// BEZIER
 };
 const GLfloat tess_extremes_inner[3][2] = {
 	{0.0f, 2.0f},	// STATIC
-	{1.0f, 1.0f},	// DYNAMIC
-	{3.0f, 32.0f}	// BEZIER
+	{1.0f, 2.0f},	// DYNAMIC
+	{3.0f, 56.0f}	// BEZIER
 };
-const GLfloat dynamic_displacement = 0.025;
 
 // Data parameters
 const int frame_window = 20;							// The number of frames over which render times are averaged
@@ -93,9 +88,6 @@ const float time_window = 15.0f;						// The time window (in seconds) over which
 
 ////////////////// FLAGS //////////////////
 bool wireframe = true;
-bool movement = false;
-bool rotation = false;
-bool display_lods_in_gui = false;
 bool display_mouse = false;
 
 ////////////////// SIGNATURES //////////////////
@@ -107,7 +99,7 @@ float average_time(float vec[]);
 void poll_time_queries(GLuint query_id, float accumulator[], int *index);
 
 int round_to_odd(float t);
-int get_triangle_count(int tech, float tess_level_outer, float tess_level_inner);
+int get_triangle_count(int tech, int static_lod, float tess_level_outer, float tess_level_inner);
 bool file_exists(const string& path);
 void convert_norm_to_obj(const string& norm_path);
 
@@ -183,7 +175,7 @@ int main() {
     ImGui_ImplOpenGL3_Init();
 
     ////////////////// MODELS //////////////////
-    // Check if .obj files are present for the different LODs, create them from the .norm files if not
+    // Check if .obj files are present for the different teapot LODs, create them from the .norm files if not
     for (int i = 0; i < 3; i++) {
         string path = "./models/teapot_surface" + to_string(i) + ".obj";
         if (!file_exists(path)) {
@@ -191,13 +183,14 @@ int main() {
         }
     }
 
-    // Load the .obj models
-    Model teapot_lod0("./models/teapot_surface0.obj", true);
-    Model teapot_lod1("./models/teapot_surface1.obj", true);
-    Model teapot_lod2("./models/teapot_surface2.obj", true);
-    
-	// Load the Bezier representation of the teapot
-	Bezier teapot_bezier("./models/teapot_bezier.bpt");
+    // Init objects
+	DLODObject teapot(
+		{"./models/teapot_surface0.obj", "./models/teapot_surface1.obj", "./models/teapot_surface2.obj"},
+		"./models/teapot_bezier.bpt"
+	);
+
+	// Place objects in the world
+	teapot.Position = vec3(0.0f, 0.0f, 0.0f);
 
     ////////////////// SHADERS //////////////////
     // Load the shader programs
@@ -254,19 +247,6 @@ int main() {
         // Clear the color and depth buffers
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // Update position and rotation according to the respective flags
-		if (movement) {
-			position += (movement_speed * delta_time) * direction;
-			if (position.z >= min_max_distance[0]) {
-				direction = {0.0f, 0.0f, -1.0f};
-			} else if (position.z <= min_max_distance[1]) {
-				direction = {0.0f, 0.0f, 1.0f};
-			}
-		}
-		if (rotation) {
-			rotation_angle = fmod(rotation_angle + rotation_speed * delta_time, 360.0f);
-		}
-
 		// Generate queries for time computations
 		GLuint time_queries_ids[3];
 		glGenQueries(3, time_queries_ids);
@@ -274,7 +254,7 @@ int main() {
 		// Render each model
 		for (int tech = STATIC; tech <= BEZIER; tech++) {
 			// Update model and light positions
-			vec3 model_position = position + position_offset * (float) tech;
+			vec3 model_position = teapot.Position + position_offset * (float) tech;
 			light_position = model_position + light_offset;
 
 			// Select LOD/tesselation level based on distance from camera
@@ -313,7 +293,6 @@ int main() {
 
 			glUniform1f(glGetUniformLocation(shaders[tech].Program, "tess_level_outer"), tess_level_outer);
 			glUniform1f(glGetUniformLocation(shaders[tech].Program, "tess_level_inner"), tess_level_inner);
-			glUniform1f(glGetUniformLocation(shaders[tech].Program, "dynamic_displacement"), dynamic_displacement);
 
 			// Compute and send the model and normal matrices
         	model_matrix = mat4(1.0f);
@@ -326,25 +305,13 @@ int main() {
 			glUniformMatrix3fv(glGetUniformLocation(shaders[tech].Program, "normal_matrix"), 1, GL_FALSE, value_ptr(normal_matrix));
 
 			// Draw based on the LOD technique
-			if (tech == STATIC) {
-				if (static_lod == 0) {
-        		    teapot_lod0.Draw();
-        		} else if (static_lod == 1) {
-        		    teapot_lod1.Draw();
-        		} else {
-        		    teapot_lod2.Draw();
-        		}
-			} else if (tech == DYNAMIC) {
-				teapot_lod2.Draw(true);
-			} else {
-				teapot_bezier.Draw();
-			}
+			teapot.Draw(tech, static_lod);
 
 			// Stop time computation
 			glEndQuery(GL_TIME_ELAPSED);
 
 			// Save the number of triangles used/generated
-			int triangle_count = get_triangle_count(tech, tess_level_outer, tess_level_inner);
+			int triangle_count = get_triangle_count(tech, static_lod, tess_level_outer, tess_level_inner);
 			trigs[tech].push_back(triangle_count);
 		}
 
@@ -365,7 +332,7 @@ int main() {
 		}
 
 		// Prepare and render GUI frame
-        prepare_gui_frame(avg_times, trigs, display_lods_in_gui);
+        prepare_gui_frame(avg_times, trigs);
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
@@ -403,16 +370,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         } else {
             glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
         }
-    } else if (key == GLFW_KEY_M && action == GLFW_PRESS) {
-		// M: movement on/off
-		movement = !movement;
-	} else if (key == GLFW_KEY_R && action == GLFW_PRESS) {
-		// R: rotation on/off
-		rotation = !rotation;
-	} else if (key == GLFW_KEY_L && action == GLFW_PRESS) {
-		// L: lods on/off
-		display_lods_in_gui = !display_lods_in_gui;
-	} else if (key == GLFW_KEY_TAB && action == GLFW_PRESS) {
+    }  else if (key == GLFW_KEY_TAB && action == GLFW_PRESS) {
 		// TAB: mouse on/off
 		display_mouse = !display_mouse;
 		if (display_mouse) {
@@ -489,10 +447,9 @@ void apply_camera_movements(float delta_time) {
 ////////////////// HELPER FUNCTIONS //////////////////
 
 // Compute the proper triangle count given a technique index and a tessellation level
-int get_triangle_count(int tech, float tess_level_outer, float tess_level_inner) {
+int get_triangle_count(int tech, int static_lod, float tess_level_outer, float tess_level_inner) {
 	if (tech == STATIC) {
-		int lod_level = round(tess_level_outer);
-		return (lod_level == 0)? 3488 : (lod_level == 1)? 19480 : 145620;
+		return (static_lod == 2)? 3488 : (static_lod == 1)? 19480 : 145620;
 	} else if (tech == DYNAMIC) {
 		int actual_tess_level_outer = ceil(tess_level_outer);
 		int actual_tess_level_inner = ceil(tess_level_inner);
