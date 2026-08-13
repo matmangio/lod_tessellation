@@ -98,8 +98,6 @@ void apply_camera_movements(float delta_time);
 float average_time(float vec[]);
 void poll_time_queries(GLuint query_id, float accumulator[], int *index);
 
-int round_to_odd(float t);
-int get_triangle_count(int tech, int static_lod, float tess_level_outer, float tess_level_inner);
 bool file_exists(const string& path);
 void convert_norm_to_obj(const string& norm_path);
 
@@ -252,7 +250,7 @@ int main() {
 		glGenQueries(3, time_queries_ids);
 
 		// Render each model
-		for (int tech = STATIC; tech <= BEZIER; tech++) {
+		for (int tech = LODTech::STATIC; tech <= LODTech::BEZIER; tech++) {
 			// Update model and light positions
 			vec3 model_position = teapot.Position + position_offset * (float) tech;
 			light_position = model_position + light_offset;
@@ -305,13 +303,13 @@ int main() {
 			glUniformMatrix3fv(glGetUniformLocation(shaders[tech].Program, "normal_matrix"), 1, GL_FALSE, value_ptr(normal_matrix));
 
 			// Draw based on the LOD technique
-			teapot.Draw(tech, static_lod);
+			teapot.Draw(static_cast<LODTech>(tech), static_lod);
 
 			// Stop time computation
 			glEndQuery(GL_TIME_ELAPSED);
 
 			// Save the number of triangles used/generated
-			int triangle_count = get_triangle_count(tech, static_lod, tess_level_outer, tess_level_inner);
+			int triangle_count = teapot.TriangleCount(static_cast<LODTech>(tech), static_lod, tess_level_outer, tess_level_inner);
 			trigs[tech].push_back(triangle_count);
 		}
 
@@ -324,7 +322,7 @@ int main() {
 		// Delete the data more than {time_window} seconds away
 		timestamps.push_back(current_frame);
 		while (timestamps.size() > 0 && current_frame - timestamps[0] > time_window) {
-			for (int tech = STATIC; tech <= BEZIER; tech++) {
+			for (int tech = LODTech::STATIC; tech <= LODTech::BEZIER; tech++) {
 				avg_times[tech].erase(avg_times[tech].begin());
 				trigs[tech].erase(trigs[tech].begin());
 			}
@@ -446,38 +444,10 @@ void apply_camera_movements(float delta_time) {
 
 ////////////////// HELPER FUNCTIONS //////////////////
 
-// Compute the proper triangle count given a technique index and a tessellation level
-int get_triangle_count(int tech, int static_lod, float tess_level_outer, float tess_level_inner) {
-	if (tech == STATIC) {
-		return (static_lod == 2)? 3488 : (static_lod == 1)? 19480 : 145620;
-	} else if (tech == DYNAMIC) {
-		int actual_tess_level_outer = ceil(tess_level_outer);
-		int actual_tess_level_inner = ceil(tess_level_inner);
-		int trigs_per_patch = 1;
-		if (actual_tess_level_outer != 1) {
-			trigs_per_patch = 3 * (actual_tess_level_outer - 1) + 1;
-		}
-		return 3488 * trigs_per_patch;
-	} else {
-		int actual_tess_level_outer = round_to_odd(tess_level_outer);
-		int actual_tess_level_inner = round_to_odd(tess_level_inner);
-		int trigs_per_patch = 4 * (actual_tess_level_outer + actual_tess_level_inner - 2) + 2 * pow(actual_tess_level_inner - 2, 2);
-		return 28 * trigs_per_patch;
-	}
-}
-
 // Returns true if a certain file exists, false otherwise
 bool file_exists(const string& path) {
     ifstream f(path);
     return f.good();
-}
-
-// Rounds the number to the next nearest odd
-int round_to_odd(float t) {
-	if (t < 0) t = 0.0f;
-
-	int res = int(ceil(t));
-	return (res % 2 == 0)? res + 1 : res;
 }
 
 // Computes the average of the passed render times over {frame_window} frames

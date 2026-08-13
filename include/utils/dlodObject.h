@@ -8,9 +8,11 @@
 using namespace std;
 
 // Define handles for lod techniques
-#define STATIC 0
-#define DYNAMIC 1
-#define BEZIER 2
+enum LODTech {
+	STATIC = 0,
+	DYNAMIC = 1,
+	BEZIER = 2
+};
 
 class DLODObject {
 private:
@@ -37,25 +39,67 @@ public:
 		}
 	}
 
-	// Delete default copy constructor & assignment
-	DLODObject(const DLODObject& copy) = delete;
-    DLODObject& operator=(const DLODObject&) = delete;
-
 	// Draw the object on screen
-	void Draw(int technique, int lod_level = 0) {
-		switch (technique) {
-		case STATIC:
+	void Draw(LODTech tech, int lod_level = 0) {
+		switch (tech) {
+		case LODTech::STATIC:
 			this->lods[lod_level].Draw();
 			break;
-		case DYNAMIC:
+		case LODTech::DYNAMIC:
 			this->lods[this->lods.size() - 1].Draw(true);
 			break;
-		case BEZIER:
+		case LODTech::BEZIER:
 			this->bezier.Draw();
 			break;
 		default:
 			break;
 		}
+	}
+
+	// Compute the object's triangle count given a technique index and a tessellation level
+	int TriangleCount(LODTech tech, int lod_level = 0, float tess_level_outer = 0.0f, float tess_level_inner = 0.0f) {
+		if (tech == LODTech::STATIC) {
+			int tot = 0;
+			for (int i = 0; i < lods[lod_level].meshes.size(); i++) {
+				tot += lods[lod_level].meshes[i].indices.size() / 3;
+			}
+			return tot;
+		} else if (tech == LODTech::DYNAMIC) {
+			int actual_tess_level_outer = ceil(tess_level_outer);
+			int actual_tess_level_inner = ceil(tess_level_inner);
+			int trigs_per_patch = 1;
+			if (actual_tess_level_outer != 1) {
+				trigs_per_patch = 3 * (actual_tess_level_outer - 1) + 1;
+			}
+
+			int tot = 0;
+			for (int i = 0; i < lods[lods.size() - 1].meshes.size(); i++) {
+				tot += lods[lods.size() - 1].meshes[i].indices.size() / 3;
+			}
+
+			return tot * trigs_per_patch;
+		} else if (tech == LODTech::BEZIER) {
+			int actual_tess_level_outer = round_to_odd(tess_level_outer);
+			int actual_tess_level_inner = round_to_odd(tess_level_inner);
+			int trigs_per_patch = 4 * (actual_tess_level_outer + actual_tess_level_inner - 2) + 2 * pow(actual_tess_level_inner - 2, 2);
+			
+			return bezier.patches * trigs_per_patch;
+		}
+
+		// If defaulted, return -1 as error
+		return -1;
+	}
+
+private:
+
+	////////////// UTILS //////////////
+	
+	// Rounds the number to the next nearest odd
+	int round_to_odd(float t) {
+		if (t < 0) t = 0.0f;
+
+		int res = int(ceil(t));
+		return (res % 2 == 0)? res + 1 : res;
 	}
 
 };
