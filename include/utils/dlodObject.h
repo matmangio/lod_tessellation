@@ -27,7 +27,8 @@ public:
 
 	// Spatial parameters
 	glm::vec3 Position;
-	glm::quat Rotation;
+	glm::vec3 RotationAxis;
+	GLfloat RotationAngle;
 
 	// Constructor
 	DLODObject(vector<char*> lod_paths, char* bezier_path) 

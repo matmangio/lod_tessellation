@@ -21,6 +21,7 @@
 #include <utils/gui.h>
 #include <utils/camera.h>
 #include <utils/dlodObject.h>
+#include <utils/data.h>
 
 using namespace std;
 using namespace glm;
@@ -28,7 +29,7 @@ using namespace glm;
 // Disable Imgui demo windows to save compile time
 #define IMGUI_DISABLE_DEMO_WINDOWS
 
-////////////////// CONSTANTS //////////////////
+////////////////// PARAMETERS //////////////////
 // Window parameters
 const GLuint screen_dimensions[2] = {1820, 980};
 const GLuint window_position[2] = {0, 40};
@@ -46,13 +47,8 @@ float first_mouse = true;								// True when the mouse was disabled last frame 
 double last_mouse_x = 0.0;								// The last registered mouse position on the x axis
 double last_mouse_y = 0.0;								// The last registered mouse position on the y axis
 
-// Movement parameters
-const float movement_speed = 4.0f;
-const float rotation_speed = 30.0f;
-const vec3 position_offset = vec3{7.0f, 0.0f, 0.0f};	// The offset between different teapots
-const vec3 light_offset = vec3(0.0f, 4.0f, 4.0f);		// The offset of the light source from each teapot
-
 // Lighting parameters
+const vec3 light_direction = vec3(0.0f, 1.0f, 0.5f);	// Vector TO the light (i.e. opposite direction of incidence)
 const GLfloat diffuse_color[3][3] = {
 	{0.298f, 0.447f, 0.69f},
 	{0.866f, 0.517f, 0.321f},
@@ -71,24 +67,27 @@ const GLfloat static_buffer_dist = 3.0f;				// Subtracted from the static bounda
 int last_static_lod = -1;
 
 const float min_max_distance[2] = {8.0f, 50.0f};
-const GLfloat tess_extremes_outer[3][2] = {
-	{0.0f, 2.0f},	// STATIC
+const GLfloat tess_extremes_outer[2][2] = {
 	{0.1f, 16.0f},	// DYNAMIC
 	{3.0f, 64.0f}	// BEZIER
 };
-const GLfloat tess_extremes_inner[3][2] = {
-	{0.0f, 2.0f},	// STATIC
+const GLfloat tess_extremes_inner[2][2] = {
 	{1.0f, 2.0f},	// DYNAMIC
 	{3.0f, 56.0f}	// BEZIER
 };
 
-// Data parameters
+// GUI parameters
 const int frame_window = 20;							// The number of frames over which render times are averaged
 const float time_window = 15.0f;						// The time window (in seconds) over which the GUI shows the aggregated data
+	
+vector<FrameData> avg_frame_data;						// Average frame data used for GUI
+float time_accumulator[frame_window] {-1};				// Circular array to store the last {frame_window} render times
+int time_accumulator_idx = 0;							// Indices for the circular array
 
 ////////////////// FLAGS //////////////////
 bool wireframe = true;
 bool display_mouse = false;
+LODTech lod_tech = LODTech::STATIC;
 
 ////////////////// SIGNATURES //////////////////
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mode);
@@ -96,7 +95,6 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void apply_camera_movements(float delta_time);
 
 float average_time(float vec[]);
-void poll_time_queries(GLuint query_id, float accumulator[], int *index);
 
 bool file_exists(const string& path);
 void convert_norm_to_obj(const string& norm_path);
@@ -158,6 +156,9 @@ int main() {
 		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 	}
 
+	////////////////// DATA INITIALIZATION //////////////////
+	open_data_file("data/tessellation.csv");
+
     ////////////////// GUI INITIALIZATION //////////////////
     // Setup ImGui and ImPlot contexts
     IMGUI_CHECKVERSION();
@@ -188,7 +189,13 @@ int main() {
 	);
 
 	// Place objects in the world
-	teapot.Position = vec3(0.0f, 0.0f, 0.0f);
+	teapot.Position = vec3(0.0f, -2.0f, 0.0f);
+	teapot.RotationAxis = vec3(0.0f, 1.0f, 0.0f);
+	teapot.RotationAngle = 0.0f;
+
+	// Create array of all objects
+	vector<DLODObject*> objects;
+	objects.push_back(&teapot);
 
     ////////////////// SHADERS //////////////////
     // Load the shader programs
@@ -211,23 +218,9 @@ int main() {
 	mat4 model_matrix = mat4(1.0f);
 	mat3 normal_matrix = mat3(1.0f);
 
-	// Movement variables
-    vec3 position = vec3(-7.0f, -1.0f, -min_max_distance[0]);
-	vec3 light_position = position + light_offset;
-    vec3 direction = vec3(0.0f, 0.0f, -1.0f);
-	float rotation_angle = 0.0f;
-
     ////////////////// RENDERING LOOP //////////////////
 	// Time variables
     float delta_time, current_frame = 0, last_frame = 0;
-
-	// Data collection variables
-	vector<float> timestamps;							// Timestamps of the collected data (equal across all techniques)
-	vector<float> avg_times[3];							// Render times for each technique averaged over {frame_window} frames
-	vector<int> trigs[3];								// Triangle counts for each technique
-	
-	float time_accumulator[3][frame_window] {-1};		// Circular arrays to store the last {frame_window} render times
-	int time_accumulator_idx[3] {0};					// Indices for the circular arrays
 
     while (!glfwWindowShouldClose(window)) {
         // Compute delta time
@@ -238,99 +231,116 @@ int main() {
         // Check for I/O events
         glfwPollEvents();
 
-		// Move camera according to events and update view matrix accordingly
+		// Move camera according to i/o and update view matrix accordingly
 		apply_camera_movements(delta_time);
 		view = camera.GetViewMatrix();
 
         // Clear the color and depth buffers
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-		// Generate queries for time computations
-		GLuint time_queries_ids[3];
-		glGenQueries(3, time_queries_ids);
+		// Generate queries for render time computations
+		vector<GLuint> time_queries_ids(objects.size());
+		glGenQueries(objects.size(), &time_queries_ids[0]);
 
-		// Render each model
-		for (int tech = LODTech::STATIC; tech <= LODTech::BEZIER; tech++) {
-			// Update model and light positions
-			vec3 model_position = teapot.Position + position_offset * (float) tech;
-			light_position = model_position + light_offset;
+		// Init frame data variables
+		GLfloat total_render_time = 0;
+		GLuint total_triangle_count = 0;
 
-			// Select LOD/tesselation level based on distance from camera
-			float distance_to_camera = distance(model_position, camera.Position);
+		// Render each object
+		for (int i = 0; i < objects.size(); i++) {
 			
-			int static_lod;
-			for (static_lod = 0; static_lod < 2; static_lod++) {
-				float boundary = (static_lod == last_static_lod - 1)? static_boundaries[static_lod] - static_buffer_dist : static_boundaries[static_lod];
-				if (distance_to_camera < boundary) {
-					break;
+			// Select LOD/tesselation level based on distance from camera
+			float distance_to_camera = distance(objects[i]->Position, camera.Position);
+			int static_lod = 0;
+			float tess_level_outer = 0.0f, tess_level_inner = 0.0f;
+			
+			if (lod_tech == LODTech::STATIC) {
+				for (static_lod = 0; static_lod < 2; static_lod++) {
+					float boundary = (static_lod == last_static_lod - 1)? static_boundaries[static_lod] - static_buffer_dist : static_boundaries[static_lod];
+					if (distance_to_camera < boundary) {
+						break;
+					}
 				}
+				last_static_lod = static_lod;
+			} else {
+				float t = glm::clamp((distance_to_camera - min_max_distance[0]) / (min_max_distance[1] - min_max_distance[0]), 0.0f, 1.0f);
+				tess_level_outer = tess_extremes_outer[lod_tech - 1][0] * t + tess_extremes_outer[lod_tech - 1][1] * (1 - t);
+				tess_level_inner = tess_extremes_inner[lod_tech - 1][0] * t + tess_extremes_inner[lod_tech - 1][1] * (1 - t);
 			}
-			last_static_lod = static_lod;
-
-			float t = glm::clamp((distance_to_camera - min_max_distance[0]) / (min_max_distance[1] - min_max_distance[0]), 0.0f, 1.0f);
-			float tess_level_outer = tess_extremes_outer[tech][0] * t + tess_extremes_outer[tech][1] * (1 - t);
-			float tess_level_inner = tess_extremes_inner[tech][0] * t + tess_extremes_inner[tech][1] * (1 - t);
 
 			// Select the appropriate shader
-			shaders[tech].Use();
+			shaders[lod_tech].Use();
 
 			// Start the computation for the render time
-			glBeginQuery(GL_TIME_ELAPSED, time_queries_ids[tech]);
+			glBeginQuery(GL_TIME_ELAPSED, time_queries_ids[i]);
 
 			// Send matrices and uniforms
-        	glUniformMatrix4fv(glGetUniformLocation(shaders[tech].Program, "projection_matrix"), 1, GL_FALSE, value_ptr(projection));
-        	glUniformMatrix4fv(glGetUniformLocation(shaders[tech].Program, "view_matrix"), 1, GL_FALSE, value_ptr(view));
-			glUniform3fv(glGetUniformLocation(shaders[tech].Program, "diffuse_color"), 1, diffuse_color[tech]);
-        	glUniform3fv(glGetUniformLocation(shaders[tech].Program, "ambient_color"), 1, ambient_color);
-        	glUniform3fv(glGetUniformLocation(shaders[tech].Program, "specular_color"), 1, specular_color);
-			glUniform3fv(glGetUniformLocation(shaders[tech].Program, "light_position"), 1, value_ptr(light_position));
-			glUniform1f(glGetUniformLocation(shaders[tech].Program, "k_d"), Kd);
-			glUniform1f(glGetUniformLocation(shaders[tech].Program, "k_s"), Ks);
-        	glUniform1f(glGetUniformLocation(shaders[tech].Program, "k_a"), Ka);
-        	glUniform1f(glGetUniformLocation(shaders[tech].Program, "shininess"), shininess);
+        	glUniformMatrix4fv(glGetUniformLocation(shaders[lod_tech].Program, "projection_matrix"), 1, GL_FALSE, value_ptr(projection));
+        	glUniformMatrix4fv(glGetUniformLocation(shaders[lod_tech].Program, "view_matrix"), 1, GL_FALSE, value_ptr(view));
+			glUniform3fv(glGetUniformLocation(shaders[lod_tech].Program, "diffuse_color"), 1, diffuse_color[lod_tech]);
+        	glUniform3fv(glGetUniformLocation(shaders[lod_tech].Program, "ambient_color"), 1, ambient_color);
+        	glUniform3fv(glGetUniformLocation(shaders[lod_tech].Program, "specular_color"), 1, specular_color);
+			glUniform3fv(glGetUniformLocation(shaders[lod_tech].Program, "light_direction"), 1, value_ptr(light_direction));
+			glUniform1f(glGetUniformLocation(shaders[lod_tech].Program, "k_d"), Kd);
+			glUniform1f(glGetUniformLocation(shaders[lod_tech].Program, "k_s"), Ks);
+        	glUniform1f(glGetUniformLocation(shaders[lod_tech].Program, "k_a"), Ka);
+        	glUniform1f(glGetUniformLocation(shaders[lod_tech].Program, "shininess"), shininess);
 
-			glUniform1f(glGetUniformLocation(shaders[tech].Program, "tess_level_outer"), tess_level_outer);
-			glUniform1f(glGetUniformLocation(shaders[tech].Program, "tess_level_inner"), tess_level_inner);
+			glUniform1f(glGetUniformLocation(shaders[lod_tech].Program, "tess_level_outer"), tess_level_outer);
+			glUniform1f(glGetUniformLocation(shaders[lod_tech].Program, "tess_level_inner"), tess_level_inner);
 
 			// Compute and send the model and normal matrices
         	model_matrix = mat4(1.0f);
 			normal_matrix = mat3(1.0f);
-        	model_matrix = translate(model_matrix, model_position);
-			model_matrix = rotate(model_matrix, radians(rotation_angle), vec3(0, 1, 0));
+        	model_matrix = translate(model_matrix, objects[i]->Position);
+			model_matrix = rotate(model_matrix, radians(objects[i]->RotationAngle), objects[i]->RotationAxis);
 			normal_matrix = inverseTranspose(mat3(view * model_matrix));
 
-        	glUniformMatrix4fv(glGetUniformLocation(shaders[tech].Program, "model_matrix"), 1, GL_FALSE, value_ptr(model_matrix));
-			glUniformMatrix3fv(glGetUniformLocation(shaders[tech].Program, "normal_matrix"), 1, GL_FALSE, value_ptr(normal_matrix));
+        	glUniformMatrix4fv(glGetUniformLocation(shaders[lod_tech].Program, "model_matrix"), 1, GL_FALSE, value_ptr(model_matrix));
+			glUniformMatrix3fv(glGetUniformLocation(shaders[lod_tech].Program, "normal_matrix"), 1, GL_FALSE, value_ptr(normal_matrix));
 
 			// Draw based on the LOD technique
-			teapot.Draw(static_cast<LODTech>(tech), static_lod);
+			objects[i]->Draw(static_cast<LODTech>(lod_tech), static_lod);
 
 			// Stop time computation
 			glEndQuery(GL_TIME_ELAPSED);
 
 			// Save the number of triangles used/generated
-			int triangle_count = teapot.TriangleCount(static_cast<LODTech>(tech), static_lod, tess_level_outer, tess_level_inner);
-			trigs[tech].push_back(triangle_count);
+			total_triangle_count += objects[i]->TriangleCount(static_cast<LODTech>(lod_tech), static_lod, tess_level_outer, tess_level_inner);
 		}
 
-		// Gather the render times of each technique (here to allow the GPU to asynchronously generate that data)
-		for (int tech = STATIC; tech <= BEZIER; tech++) {
-			poll_time_queries(time_queries_ids[tech], time_accumulator[tech], &time_accumulator_idx[tech]);
-			avg_times[tech].push_back(average_time(time_accumulator[tech]));
+		// Gather and sum the render times of each object (here to allow the GPU to asynchronously generate that data)
+		for (int i = 0; i < objects.size(); i++) {
+			GLuint64 result;
+			glGetQueryObjectui64v(time_queries_ids[i], GL_QUERY_RESULT, &result);
+			glDeleteQueries(1, &time_queries_ids[i]);
+			
+			GLfloat render_time = (float) result / 1000000;
+			total_render_time += render_time;
 		}
+
+		// Save frame data on file
+		struct FrameData frameData = {
+			current_frame,
+			lod_tech,
+			total_render_time,
+			total_triangle_count
+		};
+		write_frame_data(frameData);
+
+		// Update time accumulators and use average time for gui
+		time_accumulator[time_accumulator_idx] = total_render_time;
+		time_accumulator_idx = (time_accumulator_idx + 1) % frame_window;
+		frameData.render_time_ms = average_time(time_accumulator);
 
 		// Delete the data more than {time_window} seconds away
-		timestamps.push_back(current_frame);
-		while (timestamps.size() > 0 && current_frame - timestamps[0] > time_window) {
-			for (int tech = LODTech::STATIC; tech <= LODTech::BEZIER; tech++) {
-				avg_times[tech].erase(avg_times[tech].begin());
-				trigs[tech].erase(trigs[tech].begin());
-			}
-			timestamps.erase(timestamps.begin());	
+		avg_frame_data.push_back(frameData);
+		while (avg_frame_data.size() > 0 && current_frame - avg_frame_data[0].timestamp > time_window) {
+			avg_frame_data.erase(avg_frame_data.begin());	
 		}
 
 		// Prepare and render GUI frame
-        prepare_gui_frame(avg_times, trigs);
+        prepare_gui_frame(avg_frame_data);
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
@@ -339,9 +349,11 @@ int main() {
     }
 
     ////////////////// CLEANUP //////////////////
-	for (int tech = STATIC; tech <= BEZIER; tech++) {
+	for (int tech = LODTech::STATIC; tech <= LODTech::BEZIER; tech++) {
 		shaders[tech].Delete();
 	}
+
+	close_data_file();
     
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
@@ -368,7 +380,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         } else {
             glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
         }
-    }  else if (key == GLFW_KEY_TAB && action == GLFW_PRESS) {
+    } else if (key == GLFW_KEY_TAB && action == GLFW_PRESS) {
 		// TAB: mouse on/off
 		display_mouse = !display_mouse;
 		if (display_mouse) {
@@ -376,6 +388,39 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 			first_mouse = true;
 		} else {
 			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+		}
+	} else if (key == GLFW_KEY_1 && action == GLFW_PRESS) {
+		// 1: STATIC LOD
+		if (lod_tech != LODTech::STATIC) {
+			lod_tech = LODTech::STATIC;
+
+			// Reset time accumulator
+			time_accumulator_idx = 0;
+			for (int i = 0; i < frame_window; i++) {
+				time_accumulator[i] = -1;
+			}
+		}
+	} else if (key == GLFW_KEY_2 && action == GLFW_PRESS) {
+		// 2: DYNAMIC LOD
+		if (lod_tech != LODTech::DYNAMIC) {
+			lod_tech = LODTech::DYNAMIC;
+
+			// Reset time accumulator
+			time_accumulator_idx = 0;
+			for (int i = 0; i < frame_window; i++) {
+				time_accumulator[i] = -1;
+			}
+		}
+	} else if (key == GLFW_KEY_3 && action == GLFW_PRESS) {
+		// 3: BEZIER LOD
+		if (lod_tech != LODTech::BEZIER) {
+			lod_tech = LODTech::BEZIER;
+
+			// Reset time accumulator
+			time_accumulator_idx = 0;
+			for (int i = 0; i < frame_window; i++) {
+				time_accumulator[i] = -1;
+			}
 		}
 	}
 
@@ -444,12 +489,6 @@ void apply_camera_movements(float delta_time) {
 
 ////////////////// HELPER FUNCTIONS //////////////////
 
-// Returns true if a certain file exists, false otherwise
-bool file_exists(const string& path) {
-    ifstream f(path);
-    return f.good();
-}
-
 // Computes the average of the passed render times over {frame_window} frames
 float average_time(float vec[]) {
 	float res = 0.0f;
@@ -459,14 +498,10 @@ float average_time(float vec[]) {
 	return res / frame_window;
 }
 
-// Gets the result of the render time query and stores it in the {accumulator} circular array
-void poll_time_queries(GLuint query_id, float accumulator[], int *index) {
-	GLuint64 result;
-	glGetQueryObjectui64v(query_id, GL_QUERY_RESULT, &result);
-	glDeleteQueries(1, &query_id);
-
-	accumulator[*index] = (float) result / 1000000;
-	*index = (*index + 1) % frame_window;
+// Returns true if a certain file exists, false otherwise
+bool file_exists(const string& path) {
+    ifstream f(path);
+    return f.good();
 }
 
 // Converts the .norm file format to the desired .obj file given in the {obj_path} parameter
