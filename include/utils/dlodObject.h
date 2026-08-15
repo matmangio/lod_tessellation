@@ -30,14 +30,20 @@ public:
 	glm::vec3 RotationAxis;
 	GLfloat RotationAngle;
 
+	// Whether or not to perform early backface culling when tessellating
+	// WARNING: this may create artifacts if the object isn't completely closed
+	bool EarlyBackfaceCulling;
+
 	// Constructor
-	DLODObject(vector<char*> lod_paths, char* bezier_path) 
+	DLODObject(vector<char*> lod_paths, char* bezier_path, bool early_backface_culling = true) 
 		: bezier(bezier_path) {
 		
 		// Load a model for each LOD
 		for (int i = 0; i < lod_paths.size(); i++) {
 			this->lods.push_back(Model(lod_paths[i], true));
 		}
+
+		EarlyBackfaceCulling = early_backface_culling;
 	}
 
 	// Draw the object on screen

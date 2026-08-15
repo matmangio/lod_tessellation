@@ -2,6 +2,7 @@
 
 layout (vertices = 3) out;
 
+uniform bool early_backface_culling;
 uniform float tess_level_outer;
 uniform float tess_level_inner;
 
@@ -28,7 +29,7 @@ void main() {
 	N_es[gl_InvocationID] = N_cs[gl_InvocationID];
 
 	// Compute the level of detail for each patch
-	if (is_backfacing()) {
+	if (early_backface_culling && is_backfacing()) {
 		gl_TessLevelOuter[0] = 0;
 		gl_TessLevelOuter[1] = 0;
 		gl_TessLevelOuter[2] = 0;

@@ -2,6 +2,7 @@
 
 layout (vertices = 16) out;
 
+uniform bool early_backface_culling;
 uniform float tess_level_outer;
 uniform float tess_level_inner;
 
@@ -11,17 +12,52 @@ in vec3 V_cs[];
 out vec3 L_es[];
 out vec3 V_es[];
 
+// Get if backfacing by confronting the normal of each "face" of the patch with the view vectors
+bool is_backfacing() {
+	for (int i = 0; i < 16; i++) {
+		int A, B;
+		if (i < 12 && (i + 1) % 4 != 0) {			// Not on last column or row
+			A = i + 4;
+			B = i + 1;
+		} else if (i >= 12 && i < 15) {				// On last row (except 15)
+			A = i + 1;
+			B = i - 4;
+		} else if ((i + 1) % 4 == 0 && i < 15) {	// On last column (except 15)
+			A = i - 1;
+			B = i + 4;
+		} else {									// Only point 15
+			A = i - 4;
+			B = i - 1;
+		}
+				
+		vec3 norm = normalize(cross(gl_in[A].gl_Position.xyz - gl_in[i].gl_Position.xyz, gl_in[B].gl_Position.xyz - gl_in[i].gl_Position.xyz));
+		
+		if (dot(norm, V_cs[i]) > -0.5) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
 void main() {
 	// Send forward values for each control point
 	gl_out[gl_InvocationID].gl_Position = gl_in[gl_InvocationID].gl_Position;
 	L_es[gl_InvocationID] = L_cs[gl_InvocationID];
 	V_es[gl_InvocationID] = V_cs[gl_InvocationID];
 
-	// Compute the level of detail for each patch
-	gl_TessLevelOuter[0] = tess_level_outer;
-	gl_TessLevelOuter[1] = tess_level_outer;
-	gl_TessLevelOuter[2] = tess_level_outer;
-	gl_TessLevelOuter[3] = tess_level_outer;
+	// Compute the level of detail for the patch
+	if (early_backface_culling && is_backfacing()) {
+		gl_TessLevelOuter[0] = 0;
+		gl_TessLevelOuter[1] = 0;
+		gl_TessLevelOuter[2] = 0;
+		gl_TessLevelOuter[3] = 0;
+	} else {
+		gl_TessLevelOuter[0] = tess_level_outer;
+		gl_TessLevelOuter[1] = tess_level_outer;
+		gl_TessLevelOuter[2] = tess_level_outer;
+		gl_TessLevelOuter[3] = tess_level_outer;
+	}
 
 	gl_TessLevelInner[0] = tess_level_inner;
 	gl_TessLevelInner[1] = tess_level_inner;

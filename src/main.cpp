@@ -185,7 +185,8 @@ int main() {
     // Init objects
 	DLODObject teapot(
 		{"./models/teapot_surface0.obj", "./models/teapot_surface1.obj", "./models/teapot_surface2.obj"},
-		"./models/teapot_bezier.bpt"
+		"./models/teapot_bezier.bpt",
+		false
 	);
 
 	// Place objects in the world
@@ -286,6 +287,7 @@ int main() {
         	glUniform1f(glGetUniformLocation(shaders[lod_tech].Program, "k_a"), Ka);
         	glUniform1f(glGetUniformLocation(shaders[lod_tech].Program, "shininess"), shininess);
 
+			glUniform1i(glGetUniformLocation(shaders[lod_tech].Program, "early_backface_culling"), objects[i]->EarlyBackfaceCulling);
 			glUniform1f(glGetUniformLocation(shaders[lod_tech].Program, "tess_level_outer"), tess_level_outer);
 			glUniform1f(glGetUniformLocation(shaders[lod_tech].Program, "tess_level_inner"), tess_level_inner);
 
