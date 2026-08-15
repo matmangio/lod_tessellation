@@ -4,3 +4,4 @@ src/*.pdb
 models/*.obj
 data/*
 *.exe
+*.blend*

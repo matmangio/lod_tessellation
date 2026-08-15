@@ -98,6 +98,7 @@ float average_time(float vec[]);
 
 bool file_exists(const string& path);
 void convert_norm_to_obj(const string& norm_path);
+void convert_rib_to_bpt(const string& rib_path);
 
 ////////////////// MAIN FUNCTION //////////////////
 int main() {
@@ -181,6 +182,10 @@ int main() {
             convert_norm_to_obj(path);
         }
     }
+	// Check if .bpt files are present for Gumbo, create them from the .rib files if not
+	// if (!file_exists("./models/gumbo.bpt")) {
+		convert_rib_to_bpt("./models/gumbo.rib");
+	// }
 
     // Init objects
 	DLODObject teapot(
@@ -188,15 +193,25 @@ int main() {
 		"./models/teapot_bezier.bpt",
 		false
 	);
+	DLODObject gumbo(
+		{"./models/teapot_surface0.obj", "./models/teapot_surface1.obj", "./models/teapot_surface2.obj"},
+		"./models/gumbo.bpt"
+	);
 
 	// Place objects in the world
 	teapot.Position = vec3(0.0f, -2.0f, 0.0f);
 	teapot.RotationAxis = vec3(0.0f, 1.0f, 0.0f);
 	teapot.RotationAngle = 0.0f;
 
+	gumbo.Position = vec3(10.0f, -2.0f, 0.0f);
+	gumbo.RotationAxis = vec3(1.0f, 0.0f, 0.0f);
+	gumbo.RotationAngle = -90.0f;
+	gumbo.Scale = vec3(0.2f, 0.2f, 0.2f);
+
 	// Create array of all objects
 	vector<DLODObject*> objects;
 	objects.push_back(&teapot);
+	objects.push_back(&gumbo);
 
     ////////////////// SHADERS //////////////////
     // Load the shader programs
@@ -296,6 +311,7 @@ int main() {
 			normal_matrix = mat3(1.0f);
         	model_matrix = translate(model_matrix, objects[i]->Position);
 			model_matrix = rotate(model_matrix, radians(objects[i]->RotationAngle), objects[i]->RotationAxis);
+			model_matrix = scale(model_matrix, objects[i]->Scale);
 			normal_matrix = inverseTranspose(mat3(view * model_matrix));
 
         	glUniformMatrix4fv(glGetUniformLocation(shaders[lod_tech].Program, "model_matrix"), 1, GL_FALSE, value_ptr(model_matrix));
@@ -557,4 +573,78 @@ void convert_norm_to_obj(const string& obj_path) {
 
     norm_model.close();
     obj_model.close();
+}
+
+void convert_rib_to_bpt(const string& rib_path) {
+	string bpt_path = rib_path.substr(0, rib_path.length() - 4) + ".bpt";
+
+	ifstream rib_model(rib_path);
+    ofstream bpt_model(bpt_path);
+
+	mat4 transform = mat4(1.0f);
+	int patch_count = 0;
+	string patches = "";
+
+	string directive;
+	vec3 temp_vec;
+	float temp_float;
+
+	rib_model >> directive;
+	while (!rib_model.eof()) {
+		if (directive == "TransformBegin" || directive == "TransformEnd") {
+			transform = mat4(1.0f);
+		} else if (directive == "Translate") {
+			rib_model >> temp_vec.x;
+			rib_model >> temp_vec.y;
+			rib_model >> temp_vec.z;
+
+			transform = translate(transform, temp_vec);
+		} else if (directive == "Rotate") {
+			rib_model >> temp_float;
+			rib_model >> temp_vec.x;
+			rib_model >> temp_vec.y;
+			rib_model >> temp_vec.z;
+
+			transform = rotate(transform, radians(temp_float), temp_vec);
+		} else if (directive == "Scale") {
+			rib_model >> temp_vec.x;
+			rib_model >> temp_vec.y;
+			rib_model >> temp_vec.z;
+
+			transform = scale(transform, temp_vec);
+		} else if (directive == "Patch") {
+			// Consume prefixes
+			rib_model >> directive;
+			rib_model >> directive;
+			rib_model >> directive[0];
+
+			for (int i = 0; i < 16; i++) {
+				rib_model >> temp_vec.x;
+				rib_model >> temp_vec.y;
+				rib_model >> temp_vec.z;
+
+				vec4 transformed_cpt = transform * vec4(temp_vec, 1.0f);
+				patches.append(to_string(transformed_cpt.x) + " ");
+				patches.append(to_string(transformed_cpt.y) + " ");
+				patches.append(to_string(transformed_cpt.z) + "\n");
+			}
+			patches.append("\n");
+			patch_count++;
+
+			// Consume suffix
+			rib_model >> directive;
+		}
+
+		// Read next directive
+		rib_model >> directive;
+	}
+
+	// Write bpt file
+	bpt_model << patch_count << endl;
+	bpt_model << "3 3" << endl;
+	bpt_model << patches;
+
+	// Close files
+	bpt_model.close();
+	rib_model.close();
 }

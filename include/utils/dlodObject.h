@@ -26,9 +26,10 @@ private:
 public:
 
 	// Spatial parameters
-	glm::vec3 Position;
-	glm::vec3 RotationAxis;
-	GLfloat RotationAngle;
+	glm::vec3 Position = glm::vec3(0.0f);;
+	glm::vec3 RotationAxis = glm::vec3(0.0f, 1.0f, 0.0f);
+	GLfloat RotationAngle = 0.0f;
+	glm::vec3 Scale = glm::vec3(1.0f);
 
 	// Whether or not to perform early backface culling when tessellating
 	// WARNING: this may create artifacts if the object isn't completely closed
