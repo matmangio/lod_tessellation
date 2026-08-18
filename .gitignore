@@ -2,6 +2,7 @@ src/*.ilk
 src/*.obj
 src/*.pdb
 models/teapot_*.obj
+models/gumbo.bpt
 data/*
 *.exe
 *.blend*

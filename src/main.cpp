@@ -183,9 +183,9 @@ int main() {
         }
     }
 	// Check if .bpt files are present for Gumbo, create them from the .rib files if not
-	// if (!file_exists("./models/gumbo.bpt")) {
+	if (!file_exists("./models/gumbo.bpt")) {
 		convert_rib_to_bpt("./models/gumbo.rib");
-	// }
+	}
 
     // Init objects
 	DLODObject teapot(
