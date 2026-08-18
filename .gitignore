@@ -1,7 +1,7 @@
 src/*.ilk
 src/*.obj
 src/*.pdb
-models/*.obj
+models/teapot_*.obj
 data/*
 *.exe
 *.blend*

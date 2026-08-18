@@ -194,18 +194,16 @@ int main() {
 		false
 	);
 	DLODObject gumbo(
-		{"./models/teapot_surface0.obj", "./models/teapot_surface1.obj", "./models/teapot_surface2.obj"},
-		"./models/gumbo.bpt"
+		{"./models/gumbo_surface0.obj", "./models/gumbo_surface1.obj", "./models/gumbo_surface2.obj", "./models/gumbo_surface3.obj"},
+		"./models/gumbo.bpt",
+		false
 	);
 
 	// Place objects in the world
 	teapot.Position = vec3(0.0f, -2.0f, 0.0f);
-	teapot.RotationAxis = vec3(0.0f, 1.0f, 0.0f);
-	teapot.RotationAngle = 0.0f;
 
 	gumbo.Position = vec3(10.0f, -2.0f, 0.0f);
-	gumbo.RotationAxis = vec3(1.0f, 0.0f, 0.0f);
-	gumbo.RotationAngle = -90.0f;
+	gumbo.Rotation = vec3(-90.0f, 0.0f, 90.0f);
 	gumbo.Scale = vec3(0.2f, 0.2f, 0.2f);
 
 	// Create array of all objects
@@ -310,7 +308,9 @@ int main() {
         	model_matrix = mat4(1.0f);
 			normal_matrix = mat3(1.0f);
         	model_matrix = translate(model_matrix, objects[i]->Position);
-			model_matrix = rotate(model_matrix, radians(objects[i]->RotationAngle), objects[i]->RotationAxis);
+			model_matrix = rotate(model_matrix, radians(objects[i]->Rotation.x), vec3(1.0f, 0.0f, 0.0f));
+			model_matrix = rotate(model_matrix, radians(objects[i]->Rotation.y), vec3(0.0f, 1.0f, 0.0f));
+			model_matrix = rotate(model_matrix, radians(objects[i]->Rotation.z), vec3(0.0f, 0.0f, 1.0f));
 			model_matrix = scale(model_matrix, objects[i]->Scale);
 			normal_matrix = inverseTranspose(mat3(view * model_matrix));
 

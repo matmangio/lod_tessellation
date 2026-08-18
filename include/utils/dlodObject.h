@@ -26,9 +26,8 @@ private:
 public:
 
 	// Spatial parameters
-	glm::vec3 Position = glm::vec3(0.0f);;
-	glm::vec3 RotationAxis = glm::vec3(0.0f, 1.0f, 0.0f);
-	GLfloat RotationAngle = 0.0f;
+	glm::vec3 Position = glm::vec3(0.0f);
+	glm::vec3 Rotation = glm::vec3(0.0f);	// Euler angles (degrees)
 	glm::vec3 Scale = glm::vec3(1.0f);
 
 	// Whether or not to perform early backface culling when tessellating
