@@ -34,3 +34,14 @@ TessExtremesOuter 0.1 16.0 3.0 64.0
 TessExtremesInner 1.0 2.0 3.0 56.0
 EarlyBackfaceCulling 0
 EndObject
+
+NewObject
+StaticLODs 4 ./models/teaspoon_surface0.obj ./models/teaspoon_surface1.obj ./models/teaspoon_surface2.obj ./models/teaspoon_surface3.obj
+Bezier ./models/teaspoon_bezier.bpt
+Position -10.0 -2.0 0.0
+Rotation -90.0 0.0 0.0
+Scale 4.0 4.0 4.0
+TessExtremesOuter 0.1 16.0 3.0 16.0
+TessExtremesInner 1.0 2.0 3.0 16.0
+EarlyBackfaceCulling 0
+EndObject
