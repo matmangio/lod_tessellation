@@ -16,8 +16,8 @@ public:
 
 	GLuint VAO;
 
-	Bezier(char* path) {
-		this->load_file(path);
+	Bezier(string path) {
+		this->load_file(path.c_str());
 		this->setup_mesh();
 	}
 
@@ -35,7 +35,7 @@ private:
 	GLuint VBO;
 
 	// Open the file in BPT format and save its vertex coordinates in the control_points vector
-	void load_file(char* path) {
+	void load_file(const char* path) {
 		// Open the file
 		ifstream file;
 		file.open(path);

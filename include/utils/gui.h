@@ -93,7 +93,7 @@ void prepare_gui_frame(const vector<FrameData>& avg_frame_data) {
 
 	if (ImPlot::BeginPlot("Triangle count", ImVec2(-1, 0), ImPlotFlags_NoMouseText)) {
 		ImPlot::SetupAxisLimits(ImAxis_X1, 0, avg_frame_data.size(), ImPlotCond_Always);
-		ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 300000);
+		ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 250000);
 		ImPlot::SetupAxisLimitsConstraints(ImAxis_Y1, 0, INFINITY);
 		ImPlot::SetupAxisFormat(ImAxis_X1, "");
 		ImPlot::SetupAxisFormat(ImAxis_Y1, k_formatter);

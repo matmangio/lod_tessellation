@@ -22,6 +22,7 @@
 #include <utils/camera.h>
 #include <utils/dlodObject.h>
 #include <utils/data.h>
+#include <utils/parsers.h>
 
 using namespace std;
 using namespace glm;
@@ -61,21 +62,6 @@ const GLfloat Ks = 0.3f;
 const GLfloat Ka = 0.2f;
 const GLfloat shininess = 25.0f;
 
-// LOD and Tessellation parameters (min - max)
-const GLfloat static_boundaries[2] = {22.0f, 36.0f};
-const GLfloat static_buffer_dist = 3.0f;				// Subtracted from the static boundary when moving backwards from a higher to a lower LOD
-int last_static_lod = -1;
-
-const float min_max_distance[2] = {8.0f, 50.0f};
-const GLfloat tess_extremes_outer[2][2] = {
-	{0.1f, 16.0f},	// DYNAMIC
-	{3.0f, 64.0f}	// BEZIER
-};
-const GLfloat tess_extremes_inner[2][2] = {
-	{1.0f, 2.0f},	// DYNAMIC
-	{3.0f, 56.0f}	// BEZIER
-};
-
 // GUI parameters
 const int frame_window = 20;							// The number of frames over which render times are averaged
 const float time_window = 15.0f;						// The time window (in seconds) over which the GUI shows the aggregated data
@@ -95,10 +81,6 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void apply_camera_movements(float delta_time);
 
 float average_time(float vec[]);
-
-bool file_exists(const string& path);
-void convert_norm_to_obj(const string& norm_path);
-void convert_rib_to_bpt(const string& rib_path);
 
 ////////////////// MAIN FUNCTION //////////////////
 int main() {
@@ -175,41 +157,11 @@ int main() {
     ImGui_ImplOpenGL3_Init();
 
     ////////////////// MODELS //////////////////
-    // Check if .obj files are present for the different teapot LODs, create them from the .norm files if not
-    for (int i = 0; i < 3; i++) {
-        string path = "./models/teapot_surface" + to_string(i) + ".obj";
-        if (!file_exists(path)) {
-            convert_norm_to_obj(path);
-        }
-    }
-	// Check if .bpt files are present for Gumbo, create them from the .rib files if not
-	if (!file_exists("./models/gumbo.bpt")) {
-		convert_rib_to_bpt("./models/gumbo.rib");
-	}
+    // Run all available parsers on the models
+	run_all_parsers();
 
-    // Init objects
-	DLODObject teapot(
-		{"./models/teapot_surface0.obj", "./models/teapot_surface1.obj", "./models/teapot_surface2.obj"},
-		"./models/teapot_bezier.bpt",
-		false
-	);
-	DLODObject gumbo(
-		{"./models/gumbo_surface0.obj", "./models/gumbo_surface1.obj", "./models/gumbo_surface2.obj", "./models/gumbo_surface3.obj"},
-		"./models/gumbo.bpt",
-		false
-	);
-
-	// Place objects in the world
-	teapot.Position = vec3(0.0f, -2.0f, 0.0f);
-
-	gumbo.Position = vec3(10.0f, -2.0f, 0.0f);
-	gumbo.Rotation = vec3(-90.0f, 0.0f, 90.0f);
-	gumbo.Scale = vec3(0.2f, 0.2f, 0.2f);
-
-	// Create array of all objects
-	vector<DLODObject*> objects;
-	objects.push_back(&teapot);
-	objects.push_back(&gumbo);
+	// Load all objects in the scene by reading .scene file
+	vector<DLODObject*> objects = load_scene("./models/_demo.scene");
 
     ////////////////// SHADERS //////////////////
     // Load the shader programs
@@ -263,24 +215,8 @@ int main() {
 		// Render each object
 		for (int i = 0; i < objects.size(); i++) {
 			
-			// Select LOD/tesselation level based on distance from camera
+			// Compute distance from camera
 			float distance_to_camera = distance(objects[i]->Position, camera.Position);
-			int static_lod = 0;
-			float tess_level_outer = 0.0f, tess_level_inner = 0.0f;
-			
-			if (lod_tech == LODTech::STATIC) {
-				for (static_lod = 0; static_lod < 2; static_lod++) {
-					float boundary = (static_lod == last_static_lod - 1)? static_boundaries[static_lod] - static_buffer_dist : static_boundaries[static_lod];
-					if (distance_to_camera < boundary) {
-						break;
-					}
-				}
-				last_static_lod = static_lod;
-			} else {
-				float t = glm::clamp((distance_to_camera - min_max_distance[0]) / (min_max_distance[1] - min_max_distance[0]), 0.0f, 1.0f);
-				tess_level_outer = tess_extremes_outer[lod_tech - 1][0] * t + tess_extremes_outer[lod_tech - 1][1] * (1 - t);
-				tess_level_inner = tess_extremes_inner[lod_tech - 1][0] * t + tess_extremes_inner[lod_tech - 1][1] * (1 - t);
-			}
 
 			// Select the appropriate shader
 			shaders[lod_tech].Use();
@@ -300,10 +236,6 @@ int main() {
         	glUniform1f(glGetUniformLocation(shaders[lod_tech].Program, "k_a"), Ka);
         	glUniform1f(glGetUniformLocation(shaders[lod_tech].Program, "shininess"), shininess);
 
-			glUniform1i(glGetUniformLocation(shaders[lod_tech].Program, "early_backface_culling"), objects[i]->EarlyBackfaceCulling);
-			glUniform1f(glGetUniformLocation(shaders[lod_tech].Program, "tess_level_outer"), tess_level_outer);
-			glUniform1f(glGetUniformLocation(shaders[lod_tech].Program, "tess_level_inner"), tess_level_inner);
-
 			// Compute and send the model and normal matrices
         	model_matrix = mat4(1.0f);
 			normal_matrix = mat3(1.0f);
@@ -318,13 +250,13 @@ int main() {
 			glUniformMatrix3fv(glGetUniformLocation(shaders[lod_tech].Program, "normal_matrix"), 1, GL_FALSE, value_ptr(normal_matrix));
 
 			// Draw based on the LOD technique
-			objects[i]->Draw(static_cast<LODTech>(lod_tech), static_lod);
+			objects[i]->Draw(static_cast<LODTech>(lod_tech), distance_to_camera, shaders[lod_tech]);
 
 			// Stop time computation
 			glEndQuery(GL_TIME_ELAPSED);
 
 			// Save the number of triangles used/generated
-			total_triangle_count += objects[i]->TriangleCount(static_cast<LODTech>(lod_tech), static_lod, tess_level_outer, tess_level_inner);
+			total_triangle_count += objects[i]->TriangleCount(static_cast<LODTech>(lod_tech), distance_to_camera);
 		}
 
 		// Gather and sum the render times of each object (here to allow the GPU to asynchronously generate that data)
@@ -514,137 +446,4 @@ float average_time(float vec[]) {
 		res += vec[i];
 	}
 	return res / frame_window;
-}
-
-// Returns true if a certain file exists, false otherwise
-bool file_exists(const string& path) {
-    ifstream f(path);
-    return f.good();
-}
-
-// Converts the .norm file format to the desired .obj file given in the {obj_path} parameter
-void convert_norm_to_obj(const string& obj_path) {
-    // Open files
-    string norm_path = obj_path.substr(0, obj_path.length() - 4) + ".norm";
-    
-    ifstream norm_model(norm_path);
-    ofstream obj_model(obj_path);
-
-    // Write a comment regarding the number of triangles
-    string triangles_str;
-    getline(norm_model, triangles_str);
-    obj_model << "# Utah teapot, " << triangles_str << " triangles" << endl;
-    int triangles_count = stoi(triangles_str);
-
-    // Convert the .norm format to OBJ
-    string vertices = "# Vertices\n", normals = "# Normals\n", faces = "# Faces\n", temp;
-    int vertex_index = 1;
-    int faces_count = 0;
-    while (!norm_model.eof() && faces_count < triangles_count) {
-        // Read 6 lines as 3 vertex coordinates and 3 normal coordinates intertwined
-        for (int i = 0; i < 6; i++) {
-            getline(norm_model, temp);
-            if (i % 2 == 0) {
-                vertices.append("v " + temp + "\n");
-            } else {
-                normals.append("vn " + temp + "\n");
-            }
-        }
-
-        // Burn blank line
-        getline(norm_model, temp);
-
-        // Add the face description
-        faces.append("f");
-        for (int i = 0; i < 3; i++) {
-            string index = to_string(vertex_index + i);
-            faces.append(" " + index + "//" + index);
-        }
-        faces.append("\n");
-
-        faces_count += 1;
-        vertex_index += 3;
-    }
-
-    string options = "";
-
-    // Write vertices, normals and faces
-    obj_model << vertices << endl << normals << endl << options << endl << faces;
-
-    norm_model.close();
-    obj_model.close();
-}
-
-void convert_rib_to_bpt(const string& rib_path) {
-	string bpt_path = rib_path.substr(0, rib_path.length() - 4) + ".bpt";
-
-	ifstream rib_model(rib_path);
-    ofstream bpt_model(bpt_path);
-
-	mat4 transform = mat4(1.0f);
-	int patch_count = 0;
-	string patches = "";
-
-	string directive;
-	vec3 temp_vec;
-	float temp_float;
-
-	rib_model >> directive;
-	while (!rib_model.eof()) {
-		if (directive == "TransformBegin" || directive == "TransformEnd") {
-			transform = mat4(1.0f);
-		} else if (directive == "Translate") {
-			rib_model >> temp_vec.x;
-			rib_model >> temp_vec.y;
-			rib_model >> temp_vec.z;
-
-			transform = translate(transform, temp_vec);
-		} else if (directive == "Rotate") {
-			rib_model >> temp_float;
-			rib_model >> temp_vec.x;
-			rib_model >> temp_vec.y;
-			rib_model >> temp_vec.z;
-
-			transform = rotate(transform, radians(temp_float), temp_vec);
-		} else if (directive == "Scale") {
-			rib_model >> temp_vec.x;
-			rib_model >> temp_vec.y;
-			rib_model >> temp_vec.z;
-
-			transform = scale(transform, temp_vec);
-		} else if (directive == "Patch") {
-			// Consume prefixes
-			rib_model >> directive;
-			rib_model >> directive;
-			rib_model >> directive[0];
-
-			for (int i = 0; i < 16; i++) {
-				rib_model >> temp_vec.x;
-				rib_model >> temp_vec.y;
-				rib_model >> temp_vec.z;
-
-				vec4 transformed_cpt = transform * vec4(temp_vec, 1.0f);
-				patches.append(to_string(transformed_cpt.x) + " ");
-				patches.append(to_string(transformed_cpt.y) + " ");
-				patches.append(to_string(transformed_cpt.z) + "\n");
-			}
-			patches.append("\n");
-			patch_count++;
-
-			// Consume suffix
-			rib_model >> directive;
-		}
-
-		// Read next directive
-		rib_model >> directive;
-	}
-
-	// Write bpt file
-	bpt_model << patch_count << endl;
-	bpt_model << "3 3" << endl;
-	bpt_model << patches;
-
-	// Close files
-	bpt_model.close();
-	rib_model.close();
 }

@@ -78,8 +78,8 @@ public:
     // model rendering: calls rendering methods of each instance of Mesh class in the vector
     void Draw(bool is_patch = false)
     {
-        for(GLuint i = 0; i < this->meshes.size(); i++)
-            this->meshes[i].Draw(is_patch);
+        for (GLuint i = 0; i < this->meshes.size(); i++)
+			this->meshes[i].Draw(is_patch);
     }
 
     //////////////////////////////////////////
