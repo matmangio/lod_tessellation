@@ -1,0 +1,47 @@
+// Tessellation demo scene
+// LEGEND:
+// - NewObject [required] = Start describing a new object
+// - StaticLODs [required] = The number of static LODs (at least 3) and their .obj file paths
+// - Bezier [required] = The .bpt file path containing the control points for the object's bezier surfaces
+// - Position [optional] = 3 floats defining the object's position in the world
+// - Rotation [optional] = 3 floats defining the object's rotation angle around each axis (x, y, z)
+// - Scale [optional] = 3 floats scale of the object around 3 axes
+// - MinMaxDistance [optional] = 2 floats defining the min-max distance at which to display LOD0 and the highest LOD
+// - TessExtremesOuter [optional] = 4 floats that represent the min-max outer tessellation levels for the DYNAMIC and BEZIER techniques (in this order)
+// - TessExtremesInner [optional] = 4 floats that represent the min-max inner tessellation levels for the DYNAMIC and BEZIER techniques (in this order)
+// - EarlyBackfaceCulling [optional] = 0/1 depending on whether to activate early backface culling on the object (default: 1)
+// - StaticBuffer [optional] = a float describing the buffer size for LOD boundaries when moving backwards, used to avoid flickering
+// - EndObject [required] = Ends the object
+
+NewObject
+StaticLODs 3 ./models/teapot_surface0.obj ./models/teapot_surface1.obj ./models/teapot_surface2.obj
+Bezier ./models/teapot_bezier.bpt
+Position 0.0 -2.0 0.0
+MinMaxDistance 12.0 36.0
+TessExtremesOuter 0.1 16.0 3.0 64.0
+TessExtremesInner 1.0 2.0 3.0 56.0
+EarlyBackfaceCulling 0
+EndObject
+
+NewObject
+StaticLODs 4 ./models/gumbo_surface0.obj ./models/gumbo_surface1.obj ./models/gumbo_surface2.obj ./models/gumbo_surface3.obj
+Bezier ./models/gumbo.bpt
+Position 10.0 -2.0 0.0
+Rotation -90.0 0.0 90.0
+Scale 0.2 0.2 0.2
+MinMaxDistance 12.0 36.0
+TessExtremesOuter 0.1 16.0 2.0 16.0
+TessExtremesInner 1.0 2.0 2.0 16.0
+EarlyBackfaceCulling 0
+EndObject
+
+NewObject
+StaticLODs 4 ./models/teaspoon_surface0.obj ./models/teaspoon_surface1.obj ./models/teaspoon_surface2.obj ./models/teaspoon_surface3.obj
+Bezier ./models/teaspoon_bezier.bpt
+Position -10.0 -2.0 0.0
+Rotation -90.0 0.0 0.0
+Scale 4.0 4.0 4.0
+TessExtremesOuter 0.1 16.0 3.0 16.0
+TessExtremesInner 1.0 2.0 3.0 16.0
+EarlyBackfaceCulling 0
+EndObject

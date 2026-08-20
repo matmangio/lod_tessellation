@@ -8,20 +8,25 @@ uniform mat4 model_matrix;
 uniform mat3 normal_matrix;
 uniform mat4 view_matrix;
 
+uniform vec3 camera_position;
 uniform vec3 light_direction;
 
 // OUTPUTS
 out vec3 N_cs;
 out vec3 L_cs;
 out vec3 V_cs;
+out float camera_distance_cs;
 
 void main() {
-	vec4 mv_position = view_matrix * model_matrix * vec4(position, 1.0);
+	vec4 m_position = model_matrix * vec4(position, 1.0);
+	vec4 mv_position = view_matrix * m_position;
 
+	// Compute vertex distance from camera
+	camera_distance_cs = distance(m_position.xyz, camera_position);
+
+	// Compute L, N and V
   	L_cs = normalize(light_direction);
-
 	N_cs = normalize(normal_matrix * normal);
-	
 	V_cs = -mv_position.xyz;
 
     // Exclude projection since the TES will need the points in View Space to compute normals

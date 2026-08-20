@@ -161,7 +161,7 @@ int main() {
 	run_all_parsers();
 
 	// Load all objects in the scene by reading .scene file
-	vector<DLODObject*> objects = load_scene("./models/_demo.scene");
+	vector<DLODObject*> objects = load_scene("./demo.scene");
 
     ////////////////// SHADERS //////////////////
     // Load the shader programs
