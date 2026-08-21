@@ -9,7 +9,7 @@ uniform mat3 normal_matrix;
 uniform mat4 view_matrix;
 
 uniform vec3 camera_position;
-uniform vec3 light_direction;
+uniform vec3 light_position;
 
 // OUTPUTS
 out vec3 N_cs;
@@ -18,14 +18,11 @@ out vec3 V_cs;
 out float camera_distance_cs;
 
 void main() {
-	vec4 m_position = model_matrix * vec4(position, 1.0);
-	vec4 mv_position = view_matrix * m_position;
-
-	// Compute vertex distance from camera
-	camera_distance_cs = distance(m_position.xyz, camera_position);
+	vec4 mv_position = view_matrix * model_matrix * vec4(position, 1.0);
+	vec4 v_light_pos = view_matrix * vec4(light_position, 1.0);
 
 	// Compute L, N and V
-  	L_cs = normalize(light_direction);
+  	L_cs = normalize(v_light_pos.xyz - mv_position.xyz);
 	N_cs = normalize(normal_matrix * normal);
 	V_cs = -mv_position.xyz;
 

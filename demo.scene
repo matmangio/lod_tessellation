@@ -34,7 +34,6 @@ Scale 0.2 0.2 0.2
 MinMaxDistance 10.0 30.0
 TessExtremesOuter 0.1 8.0 2.0 16.0
 TessExtremesInner 1.0 2.0 2.0 16.0
-EarlyBackfaceCulling 0
 EndObject
 
 NewObject
@@ -47,5 +46,4 @@ Scale 4.0 4.0 4.0
 MinMaxDistance 10.0 30.0
 TessExtremesOuter 0.1 16.0 3.0 16.0
 TessExtremesInner 1.0 2.0 3.0 16.0
-EarlyBackfaceCulling 0
 EndObject

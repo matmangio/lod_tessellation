@@ -49,7 +49,7 @@ double last_mouse_x = 0.0;								// The last registered mouse position on the x
 double last_mouse_y = 0.0;								// The last registered mouse position on the y axis
 
 // Lighting parameters
-const vec3 light_direction = vec3(0.0f, 1.0f, 0.5f);	// Vector TO the light (i.e. opposite direction of incidence)
+const vec3 light_position = vec3(5.0f, 10.0f, 10.0f);
 const GLfloat diffuse_color[3][3] = {
 	{0.298f, 0.447f, 0.69f},
 	{0.866f, 0.517f, 0.321f},
@@ -57,9 +57,9 @@ const GLfloat diffuse_color[3][3] = {
 };
 const GLfloat specular_color[3] = {1.0f, 1.0f, 1.0f};
 const GLfloat ambient_color[3] = {0.1f, 0.1f, 0.1f};
-const GLfloat Kd = 0.6f;
+const GLfloat Kd = 0.5f;
 const GLfloat Ks = 0.3f;
-const GLfloat Ka = 0.2f;
+const GLfloat Ka = 0.3f;
 const GLfloat shininess = 25.0f;
 
 // GUI parameters
@@ -230,7 +230,7 @@ int main() {
 			glUniform3fv(glGetUniformLocation(shaders[lod_tech].Program, "diffuse_color"), 1, diffuse_color[lod_tech]);
         	glUniform3fv(glGetUniformLocation(shaders[lod_tech].Program, "ambient_color"), 1, ambient_color);
         	glUniform3fv(glGetUniformLocation(shaders[lod_tech].Program, "specular_color"), 1, specular_color);
-			glUniform3fv(glGetUniformLocation(shaders[lod_tech].Program, "light_direction"), 1, value_ptr(light_direction));
+			glUniform3fv(glGetUniformLocation(shaders[lod_tech].Program, "light_position"), 1, value_ptr(light_position));
 			glUniform1f(glGetUniformLocation(shaders[lod_tech].Program, "k_d"), Kd);
 			glUniform1f(glGetUniformLocation(shaders[lod_tech].Program, "k_s"), Ks);
         	glUniform1f(glGetUniformLocation(shaders[lod_tech].Program, "k_a"), Ka);
