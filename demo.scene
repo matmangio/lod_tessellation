@@ -3,6 +3,7 @@
 // - NewObject [required] = Start describing a new object
 // - StaticLODs [required] = The number of static LODs (at least 3) and their .obj file paths
 // - Bezier [required] = The .bpt file path containing the control points for the object's bezier surfaces
+// - DynamicBaseLOD [optional] = The lod number to subdivide when using the DYNAMIC method (default: max lod)
 // - Position [optional] = 3 floats defining the object's position in the world
 // - Rotation [optional] = 3 floats defining the object's rotation angle around each axis (x, y, z)
 // - Scale [optional] = 3 floats scale of the object around 3 axes
@@ -17,7 +18,7 @@ NewObject
 StaticLODs 3 ./models/teapot_surface0.obj ./models/teapot_surface1.obj ./models/teapot_surface2.obj
 Bezier ./models/teapot_bezier.bpt
 Position 0.0 -2.0 0.0
-MinMaxDistance 12.0 36.0
+MinMaxDistance 10.0 30.0
 TessExtremesOuter 0.1 16.0 3.0 64.0
 TessExtremesInner 1.0 2.0 3.0 56.0
 EarlyBackfaceCulling 0
@@ -26,11 +27,12 @@ EndObject
 NewObject
 StaticLODs 4 ./models/gumbo_surface0.obj ./models/gumbo_surface1.obj ./models/gumbo_surface2.obj ./models/gumbo_surface3.obj
 Bezier ./models/gumbo.bpt
+DynamicBaseLOD 2
 Position 10.0 -2.0 0.0
 Rotation -90.0 0.0 90.0
 Scale 0.2 0.2 0.2
-MinMaxDistance 12.0 36.0
-TessExtremesOuter 0.1 16.0 2.0 16.0
+MinMaxDistance 10.0 30.0
+TessExtremesOuter 0.1 8.0 2.0 16.0
 TessExtremesInner 1.0 2.0 2.0 16.0
 EarlyBackfaceCulling 0
 EndObject
@@ -38,9 +40,11 @@ EndObject
 NewObject
 StaticLODs 4 ./models/teaspoon_surface0.obj ./models/teaspoon_surface1.obj ./models/teaspoon_surface2.obj ./models/teaspoon_surface3.obj
 Bezier ./models/teaspoon_bezier.bpt
+DynamicBaseLOD 2
 Position -10.0 -2.0 0.0
 Rotation -90.0 0.0 0.0
 Scale 4.0 4.0 4.0
+MinMaxDistance 10.0 30.0
 TessExtremesOuter 0.1 16.0 3.0 16.0
 TessExtremesInner 1.0 2.0 3.0 16.0
 EarlyBackfaceCulling 0

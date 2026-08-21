@@ -57,7 +57,7 @@ const GLfloat diffuse_color[3][3] = {
 };
 const GLfloat specular_color[3] = {1.0f, 1.0f, 1.0f};
 const GLfloat ambient_color[3] = {0.1f, 0.1f, 0.1f};
-const GLfloat Kd = 0.5f;
+const GLfloat Kd = 0.6f;
 const GLfloat Ks = 0.3f;
 const GLfloat Ka = 0.2f;
 const GLfloat shininess = 25.0f;

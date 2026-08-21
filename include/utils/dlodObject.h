@@ -42,6 +42,9 @@ struct LODParameters {
 	// Whether or not to perform early backface culling when tessellating
 	// WARNING: this may create artifacts if the object isn't completely closed
 	bool early_backface_culling = true;
+
+	// The LOD to use when applying the DYNAMIC method
+	int dynamic_base_lod = -1;
 };
 
 class DLODObject {
@@ -110,7 +113,12 @@ public:
 
 			// Draw based on technique
 			if (tech == LODTech::DYNAMIC) {
-				this->lods[this->lods.size() - 1].Draw(true);
+				// Select max lod (coarser) if dynamic_base_lod isn't set
+				int base_lod = this->lods.size() - 1;
+				if (this->lod_params.dynamic_base_lod >= 0) {
+					base_lod = glm::min(base_lod, this->lod_params.dynamic_base_lod);
+				}
+				this->lods[base_lod].Draw(true);
 			} else if (tech == LODTech::BEZIER) {
 				this->bezier.Draw();
 			}
@@ -135,9 +143,14 @@ public:
 				trigs_per_patch = 3 * (actual_tess_level_outer - 1) + 1;
 			}
 
+			int base_lod = this->lods.size() - 1;
+			if (this->lod_params.dynamic_base_lod >= 0) {
+				base_lod = glm::min(base_lod, this->lod_params.dynamic_base_lod);
+			}
+
 			int tot = 0;
-			for (int i = 0; i < lods[lods.size() - 1].meshes.size(); i++) {
-				tot += lods[lods.size() - 1].meshes[i].indices.size() / 3;
+			for (int i = 0; i < lods[base_lod].meshes.size(); i++) {
+				tot += lods[base_lod].meshes[i].indices.size() / 3;
 			}
 
 			return tot * trigs_per_patch;

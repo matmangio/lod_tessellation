@@ -62,6 +62,8 @@ vector<DLODObject*> load_scene(const string& path) {
 			}
 		} else if (directive == "Bezier") {
 			file >> bezier_path;
+		} else if (directive == "DynamicBaseLOD") {
+			file >> lod_params.dynamic_base_lod;
 		} else if (directive == "Position") {
 			file >> position.x;
 			file >> position.y;
