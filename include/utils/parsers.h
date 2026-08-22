@@ -10,20 +10,20 @@ using namespace std;
 using namespace glm;
 
 // Load objects in a ".scene" file
-vector<DLODObject*> load_scene(const string& path) {
+void load_scene(const string& path, vector<DLODObject*>& objects) {
 	ifstream file(path);
-
-	// Output
-	vector<DLODObject*> objects;
 
 	// Temp data
 	string directive;
 
+	int instance_count = 1;
 	bool new_object = false;
 	vector<string> static_lod_paths;
 	vector<BezierMeshRef> bezier_params;
 	vec3 position = vec3(0.0f);
 	vec3 rotation = vec3(0.0f);
+	vec3 positionOffset = vec3(0.0f);
+	vec3 rotationOffset = vec3(0.0f);
 	vec3 scale = vec3(1.0f);
 	LODParameters lod_params;
 
@@ -37,19 +37,26 @@ vector<DLODObject*> load_scene(const string& path) {
 			bezier_params.clear();
 			position = vec3(0.0f);
 			rotation = vec3(0.0f);
+			positionOffset = vec3(0.0f);
+			rotationOffset = vec3(0.0f);
 			scale = vec3(1.0f);
 			lod_params = {};
 			new_object = true;
+
+			// Read how many instances to create
+			file >> instance_count;
 		} else if (directive == "EndObject" && new_object) {
-			// Create object
-			DLODObject* obj = new DLODObject(static_lod_paths, bezier_params, lod_params);
-			obj->Position = position;
-			obj->Rotation = rotation;
-			obj->Scale = scale;
+			// Create object's instances
+			for (int i = 0; i < instance_count; i++) {
+				DLODObject* obj = new DLODObject(static_lod_paths, bezier_params, lod_params);
+				obj->Position = position + (float) i * positionOffset;
+				obj->Rotation = rotation + (float) i * rotationOffset;
+				obj->Scale = scale;
 
-			// Add it to objects array
-			objects.push_back(obj);
-
+				// Add it to objects array
+				objects.push_back(obj);
+			}
+			
 			new_object = false;
 		} else if (directive == "StaticLODs") {
 			int num_of_lods;
@@ -61,27 +68,29 @@ vector<DLODObject*> load_scene(const string& path) {
 				static_lod_paths.push_back(lod_path);
 			}
 		} else if (directive == "Bezier") {
-			int num_of_bezier_meshes;
-			string tmp_path;
+			BezierMeshRef p;
+			file >> p.path;
+			file >> p.inverse_order;
 
-			file >> num_of_bezier_meshes;
-			for (int i = 0; i < num_of_bezier_meshes; i++) {
-				BezierMeshRef p;
-				file >> p.path;
-				file >> p.inverse_order;
-
-				bezier_params.push_back(p);
-			}
+			bezier_params.push_back(p);
 		} else if (directive == "DynamicBaseLOD") {
 			file >> lod_params.dynamic_base_lod;
 		} else if (directive == "Position") {
 			file >> position.x;
 			file >> position.y;
 			file >> position.z;
+		}  else if (directive == "PositionOffset") {
+			file >> positionOffset.x;
+			file >> positionOffset.y;
+			file >> positionOffset.z;
 		} else if (directive == "Rotation") {
 			file >> rotation.x;
 			file >> rotation.y;
 			file >> rotation.z;
+		} else if (directive == "RotationOffset") {
+			file >> rotationOffset.x;
+			file >> rotationOffset.y;
+			file >> rotationOffset.z; 
 		} else if (directive == "Scale") {
 			file >> scale.x;
 			file >> scale.y;
@@ -110,8 +119,6 @@ vector<DLODObject*> load_scene(const string& path) {
 			getline(file, directive);
 		}
 	}
-
-	return objects;
 }
 
 // Returns true if a certain file exists, false otherwise

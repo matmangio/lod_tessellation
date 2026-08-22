@@ -71,7 +71,7 @@ void prepare_gui_frame(const vector<FrameData>& avg_frame_data) {
 
 	if (ImPlot::BeginPlot("Frame Times", ImVec2(-1, 0), ImPlotFlags_NoMouseText)) {
 		ImPlot::SetupAxisLimits(ImAxis_X1, 0, avg_frame_data.size(), ImPlotCond_Always);
-		ImPlot::SetupAxisLimits(ImAxis_Y1, 0.0f, 2.0f);
+		ImPlot::SetupAxisLimits(ImAxis_Y1, 0.0f, 10.0f);
 		ImPlot::SetupAxisLimitsConstraints(ImAxis_Y1, 0.0, INFINITY);
 		ImPlot::SetupAxisFormat(ImAxis_Y1, "%.2f");
 		ImPlot::SetupAxisFormat(ImAxis_X1, "");
@@ -91,9 +91,9 @@ void prepare_gui_frame(const vector<FrameData>& avg_frame_data) {
 		ImPlot::EndPlot();
 	}
 
-	if (ImPlot::BeginPlot("Triangle count", ImVec2(-1, 0), ImPlotFlags_NoMouseText)) {
+	if (ImPlot::BeginPlot("Triangle count (before culling)", ImVec2(-1, 0), ImPlotFlags_NoMouseText)) {
 		ImPlot::SetupAxisLimits(ImAxis_X1, 0, avg_frame_data.size(), ImPlotCond_Always);
-		ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 350000);
+		ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1000000);
 		ImPlot::SetupAxisLimitsConstraints(ImAxis_Y1, 0, INFINITY);
 		ImPlot::SetupAxisFormat(ImAxis_X1, "");
 		ImPlot::SetupAxisFormat(ImAxis_Y1, k_formatter);

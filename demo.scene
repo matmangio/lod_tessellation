@@ -1,12 +1,14 @@
 // Tessellation demo scene
 // LEGEND:
-// - NewObject [required] = Start describing a new object
+// - NewObject [required] = A new object and the number of instances to create
 // - StaticLODs [required] = The number of static LODs (at least 3) and their .obj file paths
-// - Bezier [required] = The number of bezier meshes that must be loaded, and for each the path to the .bpt file and
-//                       0/1 based on whether or not the patches in the file are in inverse order
+// - Bezier [at least 1 required] = The path to the .bpt file containing the bezier mesh and 0/1 based on whether or not the 
+// 									patches are in inverse order
 // - DynamicBaseLOD [optional] = The lod number to subdivide when using the DYNAMIC method (default: max lod)
 // - Position [optional] = 3 floats defining the object's position in the world
+// - PositionOffset [optional] = 3 floats defining how to change the position of each instance of the object
 // - Rotation [optional] = 3 floats defining the object's rotation angle around each axis (x, y, z)
+// - RotationOffset [optional] = 3 floats defining how to change the rotation of each instance of the object around each axis (x, y, z)
 // - Scale [optional] = 3 floats scale of the object around 3 axes
 // - MinMaxDistance [optional] = 2 floats defining the min-max distance at which to display LOD0 and the highest LOD
 // - TessExtremesOuter [optional] = 4 floats that represent the min-max outer tessellation levels for the DYNAMIC and 
@@ -17,36 +19,38 @@
 // - StaticBuffer [optional] = a float describing the buffer size for LOD boundaries when moving backwards, used to avoid flickering
 // - EndObject [required] = Ends the object
 
-NewObject
+NewObject 5
 StaticLODs 3 ./models/teapot/teapot_surface0.obj ./models/teapot/teapot_surface1.obj ./models/teapot/teapot_surface2.obj
-Bezier 1 ./models/teapot/teapot_bezier.bpt 0
+Bezier ./models/teapot/teapot_bezier.bpt 0
 Position 0.0 -2.0 0.0
-MinMaxDistance 10.0 30.0
-TessExtremesOuter 0.1 16.0 3.0 64.0
-TessExtremesInner 1.0 2.0 3.0 56.0
+PositionOffset 0.0 0.0 -10.0
+MinMaxDistance 13.0 45.0
+TessExtremesOuter 1.0 14.5 3.0 64.0
+TessExtremesInner 1.0 2.0 3.0 50.0
 EarlyBackfaceCulling 0
 EndObject
 
-NewObject
+NewObject 5
 StaticLODs 4 ./models/gumbo/gumbo_surface0.obj ./models/gumbo/gumbo_surface1.obj ./models/gumbo/gumbo_surface2.obj ./models/gumbo/gumbo_surface3.obj
-Bezier 2 ./models/gumbo/gumbo.bpt 0 ./models/gumbo/gumbo_ear.bpt 1
-DynamicBaseLOD 2
-Position 10.0 -2.0 0.0
+Bezier ./models/gumbo/gumbo.bpt 0 
+Bezier ./models/gumbo/gumbo_ear.bpt 1
+Position 10.0 -2.0 3.0
+PositionOffset 0.0 0.0 -10.0
 Rotation -90.0 0.0 90.0
 Scale 0.2 0.2 0.2
-MinMaxDistance 10.0 30.0
-TessExtremesOuter 0.1 8.0 2.0 16.0
-TessExtremesInner 1.0 2.0 2.0 16.0
+MinMaxDistance 13.0 45.0
+TessExtremesOuter 1.0 6.0 2.0 32.0
+TessExtremesInner 1.0 3.0 2.0 24.0
 EndObject
 
-NewObject
+NewObject 5
 StaticLODs 4 ./models/teaspoon/teaspoon_surface0.obj ./models/teaspoon/teaspoon_surface1.obj ./models/teaspoon/teaspoon_surface2.obj ./models/teaspoon/teaspoon_surface3.obj
-Bezier 1 ./models/teaspoon/teaspoon_bezier.bpt 0
-DynamicBaseLOD 2
-Position -10.0 -2.0 0.0
+Bezier ./models/teaspoon/teaspoon_bezier.bpt 0
+Position -10.0 -2.0 -2.0
+PositionOffset 0.0 0.0 -10.0
 Rotation -90.0 0.0 0.0
 Scale 4.0 4.0 4.0
-MinMaxDistance 10.0 30.0
-TessExtremesOuter 0.1 16.0 3.0 16.0
-TessExtremesInner 1.0 2.0 3.0 16.0
+MinMaxDistance 13.0 45.0
+TessExtremesOuter 0.1 8.0 3.0 64.0
+TessExtremesInner 1.0 2.0 3.0 32.0
 EndObject

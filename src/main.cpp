@@ -40,7 +40,7 @@ const vec3 clear_color = {0.6, 0.6, 0.6};
 bool keys[1024];										// An array of booleans for each key on the keyboard
 
 // Camera parameters
-Camera camera(vec3(0.0f, 0.0f, 7.0f), false);
+Camera camera(vec3(0.0f, 5.0f, 10.0f), false);
 const float camera_speed = 10.0f;
 const float mouse_sensitivity = 0.15f;
 
@@ -161,7 +161,8 @@ int main() {
 	run_all_parsers();
 
 	// Load all objects in the scene by reading .scene file
-	vector<DLODObject*> objects = load_scene("./demo.scene");
+	vector<DLODObject*> objects;
+	load_scene("./demo.scene", objects);
 
     ////////////////// SHADERS //////////////////
     // Load the shader programs
