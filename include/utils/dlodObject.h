@@ -47,6 +47,11 @@ struct LODParameters {
 	int dynamic_base_lod = -1;
 };
 
+struct BezierMeshRef {
+	string path;			// The path to the bezier "mesh"
+	bool inverse_order;		// Whether or not the bezier "mesh" control points are in inverse order
+};
+
 class DLODObject {
 private:
 
@@ -54,7 +59,8 @@ private:
 	vector<Model> lods;
 
 	// Bezier representation of the object
-	Bezier bezier;
+	vector<Bezier> bezier;
+	vector<bool> inverts;
 
 	// LOD Parameters
 	LODParameters lod_params;
@@ -73,12 +79,19 @@ public:
     DLODObject& operator=(const DLODObject&) = delete;
 
 	// Constructor
-	DLODObject(vector<string>& lod_paths, string bezier_path, LODParameters params) 
-		: bezier(bezier_path) {
+	DLODObject(vector<string>& lod_paths, vector<BezierMeshRef>& bezier_params, LODParameters params) {
 		
 		// Load a model for each LOD
 		for (int i = 0; i < lod_paths.size(); i++) {
 			this->lods.push_back(Model(lod_paths[i], true));
+		}
+
+		// Create all bezier for the model and save their corresponding value for inverse_order
+		for (int i = 0; i < bezier_params.size(); i++) {
+			Bezier b(bezier_params[i].path);
+
+			bezier.push_back(b);
+			inverts.push_back(bezier_params[i].inverse_order);
 		}
 		
 		// Load LOD parameters
@@ -120,7 +133,12 @@ public:
 				}
 				this->lods[base_lod].Draw(true);
 			} else if (tech == LODTech::BEZIER) {
-				this->bezier.Draw();
+				for (int i = 0; i < bezier.size(); i++) {
+					// For each "bezier mesh" send whether they should invert
+					glUniform1i(glGetUniformLocation(shader.Program, "invert_order"), this->inverts[i]);
+					
+					this->bezier[i].Draw();
+				}
 			}
 		}
 	}
@@ -159,7 +177,12 @@ public:
 			int actual_tess_level_inner = round_to_odd(get_inner_tess_level(tech, distance_to_camera));
 			int trigs_per_patch = 4 * (actual_tess_level_outer + actual_tess_level_inner - 2) + 2 * pow(actual_tess_level_inner - 2, 2);
 			
-			return bezier.patches * trigs_per_patch;
+			int total_patches = 0;
+			for (int i = 0; i < bezier.size(); i++) {
+				total_patches += bezier[i].patches;
+			}
+
+			return total_patches * trigs_per_patch;
 		}
 
 		// If defaulted, return -1 as error

@@ -21,7 +21,7 @@ vector<DLODObject*> load_scene(const string& path) {
 
 	bool new_object = false;
 	vector<string> static_lod_paths;
-	string bezier_path;
+	vector<BezierMeshRef> bezier_params;
 	vec3 position = vec3(0.0f);
 	vec3 rotation = vec3(0.0f);
 	vec3 scale = vec3(1.0f);
@@ -34,7 +34,7 @@ vector<DLODObject*> load_scene(const string& path) {
 		if (directive == "NewObject") {
 			// Reset temp data
 			static_lod_paths.clear();
-			bezier_path = "";
+			bezier_params.clear();
 			position = vec3(0.0f);
 			rotation = vec3(0.0f);
 			scale = vec3(1.0f);
@@ -42,7 +42,7 @@ vector<DLODObject*> load_scene(const string& path) {
 			new_object = true;
 		} else if (directive == "EndObject" && new_object) {
 			// Create object
-			DLODObject* obj = new DLODObject(static_lod_paths, bezier_path, lod_params);
+			DLODObject* obj = new DLODObject(static_lod_paths, bezier_params, lod_params);
 			obj->Position = position;
 			obj->Rotation = rotation;
 			obj->Scale = scale;
@@ -61,7 +61,17 @@ vector<DLODObject*> load_scene(const string& path) {
 				static_lod_paths.push_back(lod_path);
 			}
 		} else if (directive == "Bezier") {
-			file >> bezier_path;
+			int num_of_bezier_meshes;
+			string tmp_path;
+
+			file >> num_of_bezier_meshes;
+			for (int i = 0; i < num_of_bezier_meshes; i++) {
+				BezierMeshRef p;
+				file >> p.path;
+				file >> p.inverse_order;
+
+				bezier_params.push_back(p);
+			}
 		} else if (directive == "DynamicBaseLOD") {
 			file >> lod_params.dynamic_base_lod;
 		} else if (directive == "Position") {
@@ -241,13 +251,16 @@ void convert_rib_to_bpt(const string& rib_path) {
 void run_all_parsers() {
 	// Check if .obj files are present for the different teapot LODs, create them from the .norm files if not
     for (int i = 0; i < 3; i++) {
-        string path = "./models/teapot_surface" + to_string(i) + ".obj";
+        string path = "./models/teapot/teapot_surface" + to_string(i) + ".obj";
         if (!file_exists(path)) {
-            convert_norm_to_obj("./models/teapot_surface" + to_string(i) + ".norm");
+            convert_norm_to_obj("./models/teapot/teapot_surface" + to_string(i) + ".norm");
         }
     }
 	// Check if .bpt files are present for Gumbo, create them from the .rib files if not
-	if (!file_exists("./models/gumbo.bpt")) {
-		convert_rib_to_bpt("./models/gumbo.rib");
+	if (!file_exists("./models/gumbo/gumbo.bpt")) {
+		convert_rib_to_bpt("./models/gumbo/gumbo.rib");
+	}
+	if (!file_exists("./models/gumbo/gumbo_ear.bpt")) {
+		convert_rib_to_bpt("./models/gumbo/gumbo_ear.rib");
 	}
 }

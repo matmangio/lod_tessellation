@@ -2,6 +2,7 @@
 
 layout (quads, fractional_odd_spacing) in;
 
+uniform bool invert_order;
 uniform mat4 projection_matrix;
 
 in vec3 L_es[];
@@ -64,6 +65,10 @@ void main() {
 	vec3 dU = evaluatePartial(3, u, 3, v, true);
 	vec3 dV = evaluatePartial(3, v, 3, u, false);
 	N = normalize(cross(dU, dV));
+
+	if (invert_order) {
+		N = -N;
+	}
 
 	// Move to clip space
 	gl_Position = projection_matrix * gl_Position;

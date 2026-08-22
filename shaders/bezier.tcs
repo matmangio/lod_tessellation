@@ -2,6 +2,7 @@
 
 layout (vertices = 16) out;
 
+uniform bool invert_order;
 uniform bool early_backface_culling;
 uniform float tess_level_outer;
 uniform float tess_level_inner;
@@ -31,7 +32,10 @@ bool is_backfacing() {
 		}
 				
 		vec3 norm = normalize(cross(gl_in[A].gl_Position.xyz - gl_in[i].gl_Position.xyz, gl_in[B].gl_Position.xyz - gl_in[i].gl_Position.xyz));
-		
+		if (invert_order) {
+			norm = -norm;
+		}
+
 		if (dot(norm, V_cs[i]) > -0.5) {
 			return false;
 		}
