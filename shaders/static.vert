@@ -9,7 +9,7 @@ uniform mat3 normal_matrix;
 uniform mat4 view_matrix;
 uniform mat4 projection_matrix;
 
-uniform vec3 light_position;
+uniform vec3 light_direction;
 
 // OUTPUTS
 out vec3 N;
@@ -18,9 +18,8 @@ out vec3 V;
 
 void main() {
 	vec4 mv_position = view_matrix * model_matrix * vec4(position, 1.0);
-	vec4 v_light_pos = view_matrix * vec4(light_position, 1.0);
 
-  	L = normalize(v_light_pos.xyz - mv_position.xyz);
+  	L = normalize(light_direction);
 	N = normalize(normal_matrix * normal);
 	V = -mv_position.xyz;
 

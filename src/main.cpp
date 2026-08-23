@@ -40,8 +40,8 @@ const vec3 clear_color = {0.792f, 0.898f, 0.929f};
 bool keys[1024];										// An array of booleans for each key on the keyboard
 
 // Camera parameters
-Camera camera(vec3(0.0f, 5.0f, 10.0f), false);
-const float camera_speed = 15.0f;
+Camera camera(vec3(0.0f, 5.0f, 10.0f), false, {vec2(-25.0, 25.0), vec2(-2.0, 35.0), vec2(-60.0, 25.0)});
+const float camera_speed = 25.0f;
 const float mouse_sensitivity = 0.15f;
 
 float first_mouse = true;								// True when the mouse was disabled last frame (or on the first frame)
@@ -49,7 +49,7 @@ double last_mouse_x = 0.0;								// The last registered mouse position on the x
 double last_mouse_y = 0.0;								// The last registered mouse position on the y axis
 
 // Lighting parameters
-const vec3 light_position = vec3(5.0f, 10.0f, 0.0f);
+const vec3 light_direction = vec3(0.0f, 1.0f, 1.0f);
 const GLfloat diffuse_color[3][3] = {
 	{0.298f, 0.447f, 0.69f},
 	{0.866f, 0.517f, 0.321f},
@@ -241,7 +241,7 @@ int main() {
 			glUniform3fv(glGetUniformLocation(shaders[lod_tech].Program, "diffuse_color"), 1, diffuse_color[lod_tech]);
         	glUniform3fv(glGetUniformLocation(shaders[lod_tech].Program, "ambient_color"), 1, ambient_color);
         	glUniform3fv(glGetUniformLocation(shaders[lod_tech].Program, "specular_color"), 1, specular_color);
-			glUniform3fv(glGetUniformLocation(shaders[lod_tech].Program, "light_position"), 1, value_ptr(light_position));
+			glUniform3fv(glGetUniformLocation(shaders[lod_tech].Program, "light_direction"), 1, value_ptr(light_direction));
 			glUniform1f(glGetUniformLocation(shaders[lod_tech].Program, "k_d"), Kd);
 			glUniform1f(glGetUniformLocation(shaders[lod_tech].Program, "k_s"), Ks);
         	glUniform1f(glGetUniformLocation(shaders[lod_tech].Program, "k_a"), Ka);
@@ -344,7 +344,7 @@ void render_plane(Model& plane, Shader& shader, const mat4& view, const mat4& pr
 	glUniform3fv(glGetUniformLocation(shader.Program, "diffuse_color"), 1, plane_color);
     glUniform3fv(glGetUniformLocation(shader.Program, "ambient_color"), 1, ambient_color);
     glUniform3fv(glGetUniformLocation(shader.Program, "specular_color"), 1, specular_color);
-	glUniform3fv(glGetUniformLocation(shader.Program, "light_position"), 1, value_ptr(light_position));
+	glUniform3fv(glGetUniformLocation(shader.Program, "light_direction"), 1, value_ptr(light_direction));
 	glUniform1f(glGetUniformLocation(shader.Program, "k_d"), Kd);
 	glUniform1f(glGetUniformLocation(shader.Program, "k_s"), Ks);
     glUniform1f(glGetUniformLocation(shader.Program, "k_a"), Ka);

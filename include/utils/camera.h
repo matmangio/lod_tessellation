@@ -61,12 +61,14 @@ public:
     GLfloat MovementCompensation = 1.0f;
     // Camera rotation parameter
     GLfloat MouseSensitivity;
+	// Camera bounds
+	vector<glm::vec2> Bounds;
 
     //////////////////////////////////////////
     // simplified constructor
     // it can be extended passing different values of speed and mouse sensitivity, etc...
-    Camera(glm::vec3 position, GLboolean onGround)
-        :Position(position),onGround(onGround),Yaw(YAW),Pitch(PITCH),MovementSpeed(SPEED),MouseSensitivity(SENSITIVITY)
+    Camera(glm::vec3 position, GLboolean onGround, vector<glm::vec2> bounds = vector<glm::vec2>())
+        :Position(position),onGround(onGround),Bounds(bounds),Yaw(YAW),Pitch(PITCH),MovementSpeed(SPEED),MouseSensitivity(SENSITIVITY)
     {
         this->WorldUp = glm::vec3(0.0f,1.0f,0.0f);
         // initialization of the camera reference system
@@ -122,6 +124,11 @@ public:
 
 		// Apply movement
 		this->Position += direction * (this->MovementSpeed * deltaTime);
+
+		// Apply bounds if present
+		for (int i = 0; i < 3 && i < Bounds.size(); i++) {
+			this->Position[i] = glm::clamp(this->Position[i], Bounds[i][0], Bounds[i][1]);
+		}
     }
 
     //////////////////////////////////////////
