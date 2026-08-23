@@ -108,7 +108,7 @@ public:
 	}
 
 	// Draw the object on screen
-	void Draw(LODTech tech, GLfloat distance_to_camera, const Shader& shader) {
+	void Draw(LODTech tech, GLfloat distance_to_camera, const Shader& shader, bool early_culling = true) {
 		if (tech == LODTech::STATIC) {
 			// Compute LOD level
 			int lod_level = get_static_lod(distance_to_camera);
@@ -120,7 +120,7 @@ public:
 			float tess_level_outer = get_outer_tess_level(tech, distance_to_camera);
 			float tess_level_inner = get_inner_tess_level(tech, distance_to_camera);
 
-			glUniform1i(glGetUniformLocation(shader.Program, "early_backface_culling"), this->lod_params.early_backface_culling);
+			glUniform1i(glGetUniformLocation(shader.Program, "early_backface_culling"), early_culling && this->lod_params.early_backface_culling);
 			glUniform1f(glGetUniformLocation(shader.Program, "tess_level_outer"), tess_level_outer);
 			glUniform1f(glGetUniformLocation(shader.Program, "tess_level_inner"), tess_level_inner);
 

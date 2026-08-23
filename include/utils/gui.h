@@ -78,7 +78,8 @@ void prepare_gui_frame(const vector<FrameData>& avg_frame_data) {
 	ImGui::BulletText("3: Switch LOD technique to BEZIER");
 	ImGui::Text("");
 	ImGui::BulletText("W/A/S/D/Q/E: Move camera");
-	ImGui::BulletText("P: Show/Hide wireframe");
+	ImGui::BulletText("R: Show/Hide wireframe");
+	ImGui::BulletText("F: Enable/Disable early backface\nculling (on objects that support it)");
 	ImGui::BulletText("Tab: Show/Hide mouse");
 	ImGui::Text("");
 

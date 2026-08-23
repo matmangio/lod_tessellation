@@ -78,6 +78,7 @@ int time_accumulator_idx = 0;							// Indices for the circular array
 ////////////////// FLAGS //////////////////
 bool wireframe = true;
 bool display_mouse = false;
+bool early_culling = true;
 LODTech lod_tech = LODTech::STATIC;
 
 ////////////////// SIGNATURES //////////////////
@@ -261,7 +262,7 @@ int main() {
 			glUniformMatrix3fv(glGetUniformLocation(shaders[lod_tech].Program, "normal_matrix"), 1, GL_FALSE, value_ptr(normal_matrix));
 
 			// Draw based on the LOD technique
-			objects[i]->Draw(static_cast<LODTech>(lod_tech), distance_to_camera, shaders[lod_tech]);
+			objects[i]->Draw(static_cast<LODTech>(lod_tech), distance_to_camera, shaders[lod_tech], early_culling);
 
 			// Stop time computation
 			glEndQuery(GL_TIME_ELAPSED);
@@ -376,15 +377,18 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
         // ESC: exit window
         glfwSetWindowShouldClose(window, true);
-    } else if (key == GLFW_KEY_P && action == GLFW_PRESS) {
-        // P: wireframe on/off
+    } else if (key == GLFW_KEY_R && action == GLFW_PRESS) {
+        // R: wireframe on/off
         wireframe = !wireframe;
         if (wireframe) {
             glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
         } else {
             glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
         }
-    } else if (key == GLFW_KEY_TAB && action == GLFW_PRESS) {
+    } else if (key == GLFW_KEY_F && action == GLFW_PRESS) {
+		// F: early backface culling on/off
+		early_culling = !early_culling;
+	} else if (key == GLFW_KEY_TAB && action == GLFW_PRESS) {
 		// TAB: mouse on/off
 		display_mouse = !display_mouse;
 		if (display_mouse) {
