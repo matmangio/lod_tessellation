@@ -33,7 +33,7 @@ using namespace glm;
 ////////////////// PARAMETERS //////////////////
 // Window parameters
 const GLuint screen_dimensions[2] = {1820, 980};
-const GLuint window_position[2] = {0, 40};
+const GLuint window_position[2] = {40, 40};
 const vec3 clear_color = {0.792f, 0.898f, 0.929f};
 
 // Input handling

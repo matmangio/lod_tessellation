@@ -35,6 +35,7 @@ void prepare_gui_frame(const vector<FrameData>& avg_frame_data) {
 	vector<float> y_time[3];
 	vector<float> x_trigs[3];
 	vector<float> y_trigs[3];
+	float time_per_trigs[3];
 
 	for (int i = 0; i < technique_changes.size(); i++) {
 		LODTech tech = avg_frame_data[technique_changes[i]].lod_technique;
@@ -69,6 +70,18 @@ void prepare_gui_frame(const vector<FrameData>& avg_frame_data) {
     // Init window
     ImGui::Begin("Performance Analysis", NULL, window_flags);
 
+	// Controls text
+	ImGui::Text("");
+	ImGui::Text("CONTROLS:");
+	ImGui::BulletText("1: Switch LOD technique to STATIC");
+	ImGui::BulletText("2: Switch LOD technique to DYNAMIC");
+	ImGui::BulletText("3: Switch LOD technique to BEZIER");
+	ImGui::Text("");
+	ImGui::BulletText("W/A/S/D/Q/E: Move camera");
+	ImGui::BulletText("P: Show/Hide wireframe");
+	ImGui::BulletText("Tab: Show/Hide mouse");
+	ImGui::Text("");
+
 	if (ImPlot::BeginPlot("Frame Times", ImVec2(-1, 0), ImPlotFlags_NoMouseText)) {
 		ImPlot::SetupAxisLimits(ImAxis_X1, 0, avg_frame_data.size(), ImPlotCond_Always);
 		ImPlot::SetupAxisLimits(ImAxis_Y1, 0.0f, 10.0f);
@@ -93,7 +106,7 @@ void prepare_gui_frame(const vector<FrameData>& avg_frame_data) {
 
 	if (ImPlot::BeginPlot("Triangle count (before culling)", ImVec2(-1, 0), ImPlotFlags_NoMouseText)) {
 		ImPlot::SetupAxisLimits(ImAxis_X1, 0, avg_frame_data.size(), ImPlotCond_Always);
-		ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1000000);
+		ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 1500000);
 		ImPlot::SetupAxisLimitsConstraints(ImAxis_Y1, 0, INFINITY);
 		ImPlot::SetupAxisFormat(ImAxis_X1, "");
 		ImPlot::SetupAxisFormat(ImAxis_Y1, k_formatter);
