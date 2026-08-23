@@ -81,6 +81,7 @@ void prepare_gui_frame(const vector<FrameData>& avg_frame_data) {
 	ImGui::BulletText("R: Show/Hide wireframe");
 	ImGui::BulletText("F: Enable/Disable early backface\nculling (on objects that support it)");
 	ImGui::BulletText("Tab: Show/Hide mouse");
+	ImGui::BulletText("Esc: Quit application");
 	ImGui::Text("");
 
 	if (ImPlot::BeginPlot("Frame Times", ImVec2(-1, 0), ImPlotFlags_NoMouseText)) {
