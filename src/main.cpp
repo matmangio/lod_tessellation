@@ -34,14 +34,14 @@ using namespace glm;
 // Window parameters
 const GLuint screen_dimensions[2] = {1820, 980};
 const GLuint window_position[2] = {0, 40};
-const vec3 clear_color = {0.6, 0.6, 0.6};
+const vec3 clear_color = {0.792f, 0.898f, 0.929f};
 
 // Input handling
 bool keys[1024];										// An array of booleans for each key on the keyboard
 
 // Camera parameters
 Camera camera(vec3(0.0f, 5.0f, 10.0f), false);
-const float camera_speed = 10.0f;
+const float camera_speed = 15.0f;
 const float mouse_sensitivity = 0.15f;
 
 float first_mouse = true;								// True when the mouse was disabled last frame (or on the first frame)
@@ -49,18 +49,23 @@ double last_mouse_x = 0.0;								// The last registered mouse position on the x
 double last_mouse_y = 0.0;								// The last registered mouse position on the y axis
 
 // Lighting parameters
-const vec3 light_position = vec3(5.0f, 10.0f, 10.0f);
+const vec3 light_position = vec3(5.0f, 10.0f, 0.0f);
 const GLfloat diffuse_color[3][3] = {
 	{0.298f, 0.447f, 0.69f},
 	{0.866f, 0.517f, 0.321f},
 	{0.333f, 0.658f, 0.407f}
 };
 const GLfloat specular_color[3] = {1.0f, 1.0f, 1.0f};
-const GLfloat ambient_color[3] = {0.1f, 0.1f, 0.1f};
+const GLfloat ambient_color[3] = {0.3f, 0.3f, 0.3f};
 const GLfloat Kd = 0.5f;
 const GLfloat Ks = 0.3f;
 const GLfloat Ka = 0.3f;
 const GLfloat shininess = 25.0f;
+
+// Plane parameters
+const vec3 plane_position = vec3(0.0f, -2.25f, -18.5f);
+const vec3 plane_scale = vec3(10.0f, 10.0f, 10.0f);
+const GLfloat plane_color[3] = {1.0f, 1.0f, 1.0f};
 
 // GUI parameters
 const int frame_window = 20;							// The number of frames over which render times are averaged
@@ -76,6 +81,8 @@ bool display_mouse = false;
 LODTech lod_tech = LODTech::STATIC;
 
 ////////////////// SIGNATURES //////////////////
+void render_plane(Model& plane, Shader& shader, const mat4& view, const mat4& projection);
+
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mode);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void apply_camera_movements(float delta_time);
@@ -163,6 +170,9 @@ int main() {
 	// Load all objects in the scene by reading .scene file
 	vector<DLODObject*> objects;
 	load_scene("./demo.scene", objects);
+
+	// Load backdrop plane
+	Model plane("./models/plane.obj");
 
     ////////////////// SHADERS //////////////////
     // Load the shader programs
@@ -260,6 +270,9 @@ int main() {
 			total_triangle_count += objects[i]->TriangleCount(static_cast<LODTech>(lod_tech), distance_to_camera);
 		}
 
+		// Render plane
+		render_plane(plane, shaders[LODTech::STATIC], view, projection);
+
 		// Gather and sum the render times of each object (here to allow the GPU to asynchronously generate that data)
 		for (int i = 0; i < objects.size(); i++) {
 			GLuint64 result;
@@ -314,6 +327,46 @@ int main() {
     glfwTerminate();
 
     return 0;
+}
+
+void render_plane(Model& plane, Shader& shader, const mat4& view, const mat4& projection) {
+	
+	// Disable wireframe if on
+	if (wireframe) {
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+	}
+
+	// Select static shader and send uniforms
+	shader.Use();
+    
+	glUniformMatrix4fv(glGetUniformLocation(shader.Program, "projection_matrix"), 1, GL_FALSE, value_ptr(projection));
+    glUniformMatrix4fv(glGetUniformLocation(shader.Program, "view_matrix"), 1, GL_FALSE, value_ptr(view));
+	glUniform3fv(glGetUniformLocation(shader.Program, "diffuse_color"), 1, plane_color);
+    glUniform3fv(glGetUniformLocation(shader.Program, "ambient_color"), 1, ambient_color);
+    glUniform3fv(glGetUniformLocation(shader.Program, "specular_color"), 1, specular_color);
+	glUniform3fv(glGetUniformLocation(shader.Program, "light_position"), 1, value_ptr(light_position));
+	glUniform1f(glGetUniformLocation(shader.Program, "k_d"), Kd);
+	glUniform1f(glGetUniformLocation(shader.Program, "k_s"), Ks);
+    glUniform1f(glGetUniformLocation(shader.Program, "k_a"), Ka);
+    glUniform1f(glGetUniformLocation(shader.Program, "shininess"), shininess);
+    
+	// Compute matrices and send them
+	mat4 model_matrix = mat4(1.0f);
+	mat3 normal_matrix = mat3(1.0f);
+    model_matrix = translate(model_matrix, plane_position);
+	model_matrix = scale(model_matrix, plane_scale);
+	normal_matrix = inverseTranspose(mat3(view * model_matrix));
+    
+	glUniformMatrix4fv(glGetUniformLocation(shader.Program, "model_matrix"), 1, GL_FALSE, value_ptr(model_matrix));
+	glUniformMatrix3fv(glGetUniformLocation(shader.Program, "normal_matrix"), 1, GL_FALSE, value_ptr(normal_matrix));
+	
+	// Actually render the plane
+	plane.Draw();
+
+	// Re-enable wireframe
+	if (wireframe) {
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+	}
 }
 
 ////////////////// I/O HANDLING //////////////////
