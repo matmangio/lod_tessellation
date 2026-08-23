@@ -104,7 +104,7 @@ int main() {
 	glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
     // Create GLFW window
-    GLFWwindow* window = glfwCreateWindow(screen_dimensions[0], screen_dimensions[1], "Static vs Dynamic LOD", nullptr, nullptr);
+    GLFWwindow* window = glfwCreateWindow(screen_dimensions[0], screen_dimensions[1], "Static vs Dynamic vs Bezier LOD", nullptr, nullptr);
     if (window == NULL) {
         cout << "Failed to create GLFW window. Terminating..." << endl;
         glfwTerminate();
