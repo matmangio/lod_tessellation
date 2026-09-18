@@ -39,8 +39,8 @@ PositionOffset 0.0 0.0 -10.0
 Rotation -90.0 0.0 90.0
 Scale 0.2 0.2 0.2
 MinMaxDistance 13.0 35.0
-TessExtremesOuter 1.0 6.0 2.0 32.0
-TessExtremesInner 1.0 3.0 2.0 24.0
+TessExtremesOuter 1.0 3.0 2.0 32.0
+TessExtremesInner 1.0 2.5 2.0 24.0
 EndObject
 
 NewObject 5

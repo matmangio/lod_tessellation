@@ -148,35 +148,79 @@ public:
 		if (tech == LODTech::STATIC) {
 			int lod_level = get_static_lod(distance_to_camera);
 
-			int tot = 0;
+			int tot_trigs = 0;
 			for (int i = 0; i < lods[lod_level].meshes.size(); i++) {
-				tot += lods[lod_level].meshes[i].indices.size() / 3;
+				tot_trigs += lods[lod_level].meshes[i].indices.size() / 3;
 			}
-			return tot;
+			return tot_trigs;
 		} else if (tech == LODTech::DYNAMIC) {
-			int actual_tess_level_outer = ceil(get_outer_tess_level(tech, distance_to_camera));
-			int actual_tess_level_inner = ceil(get_inner_tess_level(tech, distance_to_camera));
+			// DYNAMIC uses equal_spacing (clamp in [1, max] then ceil)
+			int actual_tess_level_outer = ceil(glm::clamp(get_outer_tess_level(tech, distance_to_camera), 1.0f, (float) GL_MAX_TESS_GEN_LEVEL));
+			int actual_tess_level_inner = ceil(glm::clamp(get_inner_tess_level(tech, distance_to_camera), 1.0f, (float) GL_MAX_TESS_GEN_LEVEL));
+			
+			// Compute how many triangles each patch is tessellated into
 			int trigs_per_patch = 1;
-			if (actual_tess_level_outer != 1) {
-				trigs_per_patch = 3 * (actual_tess_level_outer - 1) + 1;
+			if (actual_tess_level_outer > 1 || actual_tess_level_inner > 1) {
+			
+				// Minimum inner level when tessellating is 2
+				if (actual_tess_level_inner == 1) {
+					actual_tess_level_inner = 2;
+				}
+
+				// We compute how many triangles sit between each ring
+				int last_edges = actual_tess_level_outer;			// The first outer edge uses the actual outer tessellation
+				int current_edges = actual_tess_level_inner - 2;	// The first inner edge uses the inner tessellation - 2
+				trigs_per_patch = 0;
+				while (current_edges >= 0) {
+
+					trigs_per_patch += 3 * (last_edges + current_edges);	// 3 since triangle has 3 sides
+
+					last_edges = current_edges;			// The current inner edge becomes the next outer edge
+					current_edges = current_edges - 2;	// Each ring the number of edges reduces by 2
+				}
 			}
 
+			// Get base tessellated lod and its total number of triangles
 			int base_lod = this->lods.size() - 1;
 			if (this->lod_params.dynamic_base_lod >= 0) {
 				base_lod = glm::min(base_lod, this->lod_params.dynamic_base_lod);
 			}
 
-			int tot = 0;
+			int tot_trigs = 0;
 			for (int i = 0; i < lods[base_lod].meshes.size(); i++) {
-				tot += lods[base_lod].meshes[i].indices.size() / 3;
+				tot_trigs += lods[base_lod].meshes[i].indices.size() / 3;
 			}
 
-			return tot * trigs_per_patch;
+			// Each triangle is tessellated with the same tessellation levels
+			return tot_trigs * trigs_per_patch;
 		} else if (tech == LODTech::BEZIER) {
-			int actual_tess_level_outer = round_to_odd(get_outer_tess_level(tech, distance_to_camera));
-			int actual_tess_level_inner = round_to_odd(get_inner_tess_level(tech, distance_to_camera));
-			int trigs_per_patch = 4 * (actual_tess_level_outer + actual_tess_level_inner - 2) + 2 * pow(actual_tess_level_inner - 2, 2);
+			// BEZIER uses fractional_odd_spacing for smoother transitions (clamp in [1, max - 1] then ceil to odd)
+			int actual_tess_level_outer = round_to_odd(glm::clamp(get_outer_tess_level(tech, distance_to_camera), 1.0f, (float) GL_MAX_TESS_GEN_LEVEL - 1));
+			int actual_tess_level_inner = round_to_odd(glm::clamp(get_inner_tess_level(tech, distance_to_camera), 1.0f, (float) GL_MAX_TESS_GEN_LEVEL - 1));
 			
+			// Compute how many triangles each patch is tessellated into
+			int trigs_per_patch = 2;
+			if (actual_tess_level_outer > 1 || actual_tess_level_inner > 1) {
+
+				// Minimum inner level when tessellating is 3
+				if (actual_tess_level_inner == 1) {
+					actual_tess_level_inner = 3;
+				}
+
+				// We compute how many triangles sit between each ring
+				int last_edges = actual_tess_level_outer;			// The first outer edge uses the actual outer tessellation
+				int current_edges = actual_tess_level_inner - 2;	// The first inner edge uses the inner tessellation - 2 
+				trigs_per_patch = 0;
+				while (current_edges >= 0) {
+
+					trigs_per_patch += 4 * (last_edges + current_edges);	// 4 since quad has 4 sides
+
+					last_edges = current_edges;			// The current inner edge becomes the next outer edge
+					current_edges = current_edges - 2;	// Each ring the number of edges reduces by 2
+				}
+
+			}
+
 			int total_patches = 0;
 			for (int i = 0; i < bezier.size(); i++) {
 				total_patches += bezier[i].patches;

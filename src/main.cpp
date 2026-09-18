@@ -76,7 +76,7 @@ float time_accumulator[frame_window] {-1};				// Circular array to store the las
 int time_accumulator_idx = 0;							// Indices for the circular array
 
 ////////////////// FLAGS //////////////////
-bool wireframe = true;
+bool wireframe = false;
 bool display_mouse = false;
 bool early_culling = true;
 LODTech lod_tech = LODTech::STATIC;
@@ -198,11 +198,12 @@ int main() {
 
     ////////////////// RENDERING LOOP //////////////////
 	// Time variables
-    float delta_time, current_frame = 0, last_frame = 0;
+    float delta_time = 0, current_frame = 0, last_frame = 0;
+	float load_time = glfwGetTime();
 
     while (!glfwWindowShouldClose(window)) {
         // Compute delta time
-        current_frame = glfwGetTime();
+        current_frame = glfwGetTime() - load_time;
         delta_time = current_frame - last_frame;
         last_frame = current_frame;
 
@@ -289,7 +290,9 @@ int main() {
 			current_frame,
 			lod_tech,
 			total_render_time,
-			total_triangle_count
+			total_triangle_count,
+			wireframe,
+			early_culling
 		};
 		write_frame_data(frameData);
 
