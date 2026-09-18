@@ -1,0 +1,63 @@
+p {
+    font-size: 15px;
+}
+
+table {
+    margin-left: auto;
+    margin-right: auto;
+}
+
+img {
+    display: block;
+    margin: auto;
+}
+
+figcaption {
+    margin-top: 8px;
+    text-align: center;
+}
+
+body {
+	counter-reset: heading;
+}
+h2:before {
+	content: counter(heading)". ";
+	counter-increment: heading;
+}
+h2 {
+	counter-reset: subheading;
+}
+h3:before {
+	content: counter(heading)"." counter(subheading)". ";
+	counter-increment: subheading;
+}
+h3 {
+    counter-reset: ssubheading;
+	text-decoration: underline;
+	font-size: large - 0.5px;
+}
+h4:before {
+	content: counter(heading)"." counter(subheading)"."counter(ssubheading)". ";
+	counter-increment: ssubheading;
+}
+h4 {
+    font-weight: normal;
+    font-size: medium - 0.5px;
+    text-decoration: underline;
+    counter-reset: sssubheading;
+}
+h5:before {
+	content: counter(heading)"." counter(subheading)"."counter(ssubheading)"."counter(sssubheading)". ";
+	counter-increment: sssubheading;
+}
+h5 {
+    font-weight: normal;
+}
+
+a {
+    color: lightseagreen;
+}
+
+:not(pre):not(.hljs) > code {
+    color: darkred;
+}
