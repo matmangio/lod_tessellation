@@ -1,7 +1,7 @@
 src/*.ilk
 src/*.obj
 src/*.pdb
-data/*
+data/*.csv
 docs/pdf/
 *.exe
 *.blend*
