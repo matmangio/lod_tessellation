@@ -18,7 +18,9 @@
 // - EarlyBackfaceCulling [optional] = 0/1 depending on whether to activate early backface culling on the object (default: 1)
 // - StaticBuffer [optional] = a float describing the buffer size for LOD boundaries when moving backwards, used to avoid flickering
 // - EndObject [required] = Ends the object
+// - // = comment, ignored by the parser
 
+// Teapots
 NewObject 5
 StaticLODs 3 ./models/teapot/teapot_surface0.obj ./models/teapot/teapot_surface1.obj ./models/teapot/teapot_surface2.obj
 Bezier ./models/teapot/teapot_bezier.bpt 0
@@ -30,6 +32,7 @@ TessExtremesInner 1.0 2.0 3.0 50.0
 EarlyBackfaceCulling 0
 EndObject
 
+// Elephants
 NewObject 5
 StaticLODs 4 ./models/gumbo/gumbo_surface0.obj ./models/gumbo/gumbo_surface1.obj ./models/gumbo/gumbo_surface2.obj ./models/gumbo/gumbo_surface3.obj
 Bezier ./models/gumbo/gumbo.bpt 0 
@@ -43,6 +46,7 @@ TessExtremesOuter 1.0 3.0 2.0 32.0
 TessExtremesInner 1.0 2.5 2.0 24.0
 EndObject
 
+// Spoons
 NewObject 5
 StaticLODs 4 ./models/teaspoon/teaspoon_surface0.obj ./models/teaspoon/teaspoon_surface1.obj ./models/teaspoon/teaspoon_surface2.obj ./models/teaspoon/teaspoon_surface3.obj
 Bezier ./models/teaspoon/teaspoon_bezier.bpt 0

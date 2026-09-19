@@ -16,11 +16,11 @@ struct FrameData {
 	bool early_culling;
 };
 
-// Reference to the opened data file
+// Reference to the current data file
 ofstream output;
 
 // Open the data file
-void open_data_file(char* path) {
+void open_data_file(const char* path) {
 	// Open file
 	output.open(path);
 	

@@ -2,6 +2,7 @@
 #include <fstream>
 #include <string>
 #include <math.h>
+#include <ctime>
 
 #include <glad/glad.h>
 #include <glfw/glfw3.h>
@@ -148,7 +149,16 @@ int main() {
 	}
 
 	////////////////// DATA INITIALIZATION //////////////////
-	open_data_file("data/tessellation.csv");
+	char date_cstr[20];
+	time_t timestamp = time(NULL);
+	struct tm datetime = *localtime(&timestamp);
+	strftime(date_cstr, 20, "%Y-%m-%d %H-%M-%S", &datetime);
+
+	string directory("data/");
+	string extension(".csv");
+	string path = directory.append(date_cstr).append(extension);
+
+	open_data_file(path.c_str());
 
     ////////////////// GUI INITIALIZATION //////////////////
     // Setup ImGui and ImPlot contexts
