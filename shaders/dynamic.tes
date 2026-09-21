@@ -3,6 +3,7 @@
 layout (triangles, equal_spacing) in;
 
 uniform mat4 projection_matrix;
+uniform float displacement_factor;
 
 in vec3 L_es[];
 in vec3 V_es[];
@@ -12,6 +13,7 @@ out vec3 L;
 out vec3 V;
 out vec3 N;
 
+// Interpolate using the vertex tessellation coordinates
 vec3 interpolate(vec3 v0, vec3 v1, vec3 v2) {
     return vec3(gl_TessCoord.x) * v0 + vec3(gl_TessCoord.y) * v1 + vec3(gl_TessCoord.z) * v2;
 }
@@ -23,6 +25,7 @@ void main() {
 	N = normalize(interpolate(N_es[0], N_es[1], N_es[2]));
 
 	vec3 mv_position = interpolate(gl_in[0].gl_Position.xyz, gl_in[1].gl_Position.xyz, gl_in[2].gl_Position.xyz);
+	mv_position += N * displacement_factor;
 
 	// Finish transformations using the projection matrix
 	gl_Position = projection_matrix * vec4(mv_position, 1.0);

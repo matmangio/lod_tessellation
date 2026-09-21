@@ -75,6 +75,8 @@ void load_scene(const string& path, vector<DLODObject*>& objects) {
 			bezier_params.push_back(p);
 		} else if (directive == "DynamicBaseLOD") {
 			file >> lod_params.dynamic_base_lod;
+		} else if (directive == "DynamicDisplacementFactor") {
+			file >> lod_params.dynamic_displacement_factor;
 		} else if (directive == "Position") {
 			file >> position.x;
 			file >> position.y;

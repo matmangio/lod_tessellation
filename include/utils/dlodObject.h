@@ -45,6 +45,9 @@ struct LODParameters {
 
 	// The LOD to use when applying the DYNAMIC method
 	int dynamic_base_lod = -1;
+
+	// The coefficient of displacement for each vertex along its normal when applying the DYNAMIC method
+	float dynamic_displacement_factor = 0.05;
 };
 
 struct BezierMeshRef {
@@ -123,6 +126,7 @@ public:
 			glUniform1i(glGetUniformLocation(shader.Program, "early_backface_culling"), early_culling && this->lod_params.early_backface_culling);
 			glUniform1f(glGetUniformLocation(shader.Program, "tess_level_outer"), tess_level_outer);
 			glUniform1f(glGetUniformLocation(shader.Program, "tess_level_inner"), tess_level_inner);
+			glUniform1f(glGetUniformLocation(shader.Program, "displacement_factor"), this->lod_params.dynamic_displacement_factor);
 
 			// Draw based on technique
 			if (tech == LODTech::DYNAMIC) {

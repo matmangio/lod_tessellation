@@ -5,6 +5,7 @@
 // - Bezier [at least 1 required] = The path to the .bpt file containing the bezier mesh and 0/1 based on whether or not the 
 // 									patches are in inverse order
 // - DynamicBaseLOD [optional] = The lod number to subdivide when using the DYNAMIC method (default: max lod)
+// - DynamicDisplacementFactor [optional] = A float that determines how much to displace each tessellated vertex along its normal when using the DYNAMIC method (default: 0.05)
 // - Position [optional] = 3 floats defining the object's position in the world
 // - PositionOffset [optional] = 3 floats defining how to change the position of each instance of the object
 // - Rotation [optional] = 3 floats defining the object's rotation angle around each axis (x, y, z)
