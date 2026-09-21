@@ -318,7 +318,7 @@ int main() {
 		}
 
 		// Prepare and render GUI frame
-        prepare_gui_frame(avg_frame_data);
+        prepare_gui_frame(avg_frame_data, wireframe, early_culling);
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 

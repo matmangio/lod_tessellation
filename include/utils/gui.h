@@ -16,7 +16,7 @@ int k_formatter(double value, char* buff, int size, void* data) {
     return snprintf(buff, size, "%.0f", value); 
 }
 
-void prepare_gui_frame(const vector<FrameData>& avg_frame_data) {
+void prepare_gui_frame(const vector<FrameData>& avg_frame_data, bool wireframe_flag = false, bool early_culling_flag = false) {
     // Return if no data
 	if (avg_frame_data.size() == 0) {
 		return;
@@ -84,9 +84,27 @@ void prepare_gui_frame(const vector<FrameData>& avg_frame_data) {
 	ImGui::BulletText("Esc: Quit application");
 	ImGui::Text("");
 
+	ImGui::Text("FLAGS:");
+	if (wireframe_flag) {
+		ImGui::Bullet();
+		ImGui::TextColored(ImVec4(0, 1, 0, 1), "Wireframe: ON");
+	} else {
+		ImGui::Bullet();
+		ImGui::TextColored(ImVec4(1, 0, 0, 1), "Wireframe: OFF");
+	}
+
+	if (early_culling_flag) {
+		ImGui::Bullet();
+		ImGui::TextColored(ImVec4(0, 1, 0, 1), "Early Backface Culling: ON");
+	} else {
+		ImGui::Bullet();
+		ImGui::TextColored(ImVec4(1, 0, 0, 1), "Early Backface Culling: OFF");
+	}
+	ImGui::Text("");
+
 	if (ImPlot::BeginPlot("Frame Times", ImVec2(-1, 0), ImPlotFlags_NoMouseText)) {
 		ImPlot::SetupAxisLimits(ImAxis_X1, 0, avg_frame_data.size(), ImPlotCond_Always);
-		ImPlot::SetupAxisLimits(ImAxis_Y1, 0.0f, 10.0f);
+		ImPlot::SetupAxisLimits(ImAxis_Y1, 0.0f, 7.0f);
 		ImPlot::SetupAxisLimitsConstraints(ImAxis_Y1, 0.0, INFINITY);
 		ImPlot::SetupAxisFormat(ImAxis_Y1, "%.2f");
 		ImPlot::SetupAxisFormat(ImAxis_X1, "");
@@ -105,6 +123,8 @@ void prepare_gui_frame(const vector<FrameData>& avg_frame_data) {
 
 		ImPlot::EndPlot();
 	}
+
+	ImGui::Text("");
 
 	if (ImPlot::BeginPlot("Triangle count (before culling)", ImVec2(-1, 0), ImPlotFlags_NoMouseText)) {
 		ImPlot::SetupAxisLimits(ImAxis_X1, 0, avg_frame_data.size(), ImPlotCond_Always);

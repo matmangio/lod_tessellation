@@ -25,7 +25,7 @@ void open_data_file(const char* path) {
 	output.open(path);
 	
 	// Write header
-	output << "Timestamp,LOD Technique,Render Time (ms), Triangle Count, Wireframe, Early Culling" << endl;
+	output << "timestamp,lod_tech,render_time_ms,triangles,wireframe,early_culling" << endl;
 }
 
 void write_frame_data(FrameData data) {
