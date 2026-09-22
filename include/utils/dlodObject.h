@@ -47,7 +47,7 @@ struct LODParameters {
 	int dynamic_base_lod = -1;
 
 	// The coefficient of displacement for each vertex along its normal when applying the DYNAMIC method
-	float dynamic_displacement_factor = 0.05;
+	float dynamic_displacement_factor = 0.01;
 };
 
 struct BezierMeshRef {
